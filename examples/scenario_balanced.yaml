@@ -1,0 +1,5 @@
+# Balanced improvements across skills
+serve_probabilities.ace: 0.03                      # +3% ace rate
+attack_probabilities.excellent_set.kill: 0.05     # +5% kill rate
+block_probabilities.power_attack.stuff: 0.04      # +4% stuff rate
+receive_probabilities.in_play_serve.excellent: 0.06 # +6% excellent reception

@@ -1,0 +1,12 @@
+#!/bin/bash
+# BVSim CLI wrapper script
+# This allows users to run 'bvsim' instead of 'python3 -m bvsim'
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Set PYTHONPATH to include the src directory
+export PYTHONPATH="${SCRIPT_DIR}/src:${PYTHONPATH}"
+
+# Execute the bvsim module with all arguments
+python3 -m bvsim "$@"

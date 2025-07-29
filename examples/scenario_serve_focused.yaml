@@ -1,0 +1,3 @@
+# Serve-focused improvements
+serve_probabilities.ace: 0.08                      # +8% ace rate
+serve_probabilities.in_play: 0.02                  # +2% in-play serves

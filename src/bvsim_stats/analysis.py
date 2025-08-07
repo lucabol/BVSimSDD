@@ -8,6 +8,8 @@ import os
 from collections import Counter
 from typing import List, Dict, Any
 import copy
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
+import multiprocessing
 
 # Add bvsim_core to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -190,8 +192,81 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
     return results
 
 
+def _test_single_deltas_file(args_tuple):
+    """Helper function to test a single deltas file - designed for parallel execution"""
+    (deltas_file, team_dict, opponent_dict, points_per_test, base_serving, baseline_win_rate) = args_tuple
+    
+    import yaml
+    from pathlib import Path
+    
+    # Load deltas file
+    deltas_path = Path(deltas_file)
+    if not deltas_path.exists():
+        return deltas_file, None, f"Deltas file not found: {deltas_file}"
+    
+    try:
+        with open(deltas_path, 'r') as f:
+            deltas_data = yaml.safe_load(f)
+        
+        if not deltas_data:
+            return deltas_file, None, f"Empty or invalid deltas file: {deltas_file}"
+        
+        # Recreate team objects from dictionaries (needed for multiprocessing)
+        team = Team.from_dict(team_dict)
+        opponent = Team.from_dict(opponent_dict)
+        
+        # Create modified team with ALL deltas applied together
+        modified_team_data = copy.deepcopy(team_dict)
+        
+        # Apply all deltas from this file
+        for parameter, delta_value in deltas_data.items():
+            try:
+                # Get current value
+                current_value = get_nested_value(modified_team_data, parameter)
+                if not isinstance(current_value, (int, float)):
+                    print(f"Warning: Skipping non-numeric parameter '{parameter}' in {deltas_file}")
+                    continue
+                
+                # Calculate new value (additive)
+                new_value = current_value + delta_value
+                
+                # Apply delta improvement with probability adjustment
+                modified_team_data = _adjust_probability_distribution(
+                    modified_team_data, 
+                    parameter, 
+                    new_value
+                )
+                
+            except KeyError:
+                print(f"Warning: Parameter '{parameter}' not found in team configuration (file: {deltas_file})")
+                continue
+            except Exception as e:
+                print(f"Warning: Error processing parameter '{parameter}' in {deltas_file}: {e}")
+                continue
+        
+        # Create the modified team and calculate win rate
+        modified_team = Team.from_dict(modified_team_data)
+        file_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+        improvement = file_win_rate - baseline_win_rate
+        
+        # Use filename without extension as display name
+        file_display_name = deltas_path.stem
+        
+        result = {
+            "win_rate": file_win_rate,
+            "improvement": improvement,
+            "file_path": deltas_file,
+            "deltas_count": len(deltas_data)
+        }
+        
+        return deltas_file, result, None
+        
+    except Exception as e:
+        return deltas_file, None, f"Error processing file {deltas_file}: {e}"
+
+
 def multi_delta_skill_analysis(team: Team, opponent: Team, deltas_files: list, points_per_test: int = 100000,
-                               base_serving: str = "A") -> dict:
+                               base_serving: str = "A", parallel: bool = True) -> dict:
     """
     Analyze impact of applying all deltas from multiple files (each file applied as a complete set).
     
@@ -201,11 +276,11 @@ def multi_delta_skill_analysis(team: Team, opponent: Team, deltas_files: list, p
         deltas_files: List of YAML files with dot-notation improvements
         points_per_test: Number of points to simulate per test (default: 100000)
         base_serving: Which team serves ("A" or "B")
+        parallel: Use parallel processing for file testing (default: True)
         
     Returns:
         Dictionary with baseline and results for each delta file
     """
-    import yaml
     from pathlib import Path
     
     # Calculate baseline win rate
@@ -216,75 +291,113 @@ def multi_delta_skill_analysis(team: Team, opponent: Team, deltas_files: list, p
         "file_results": {}
     }
     
-    # Process each deltas file
-    for deltas_file in deltas_files:
-        # Load deltas file
-        deltas_path = Path(deltas_file)
-        if not deltas_path.exists():
-            print(f"Warning: Deltas file not found: {deltas_file}")
-            continue
+    # Only use parallel processing for larger workloads where the overhead is worth it
+    if parallel and len(deltas_files) > 1 and points_per_test >= 50000:
+        # Parallel processing using ProcessPoolExecutor for CPU-bound simulation work
+        team_dict = team.to_dict()
+        opponent_dict = opponent.to_dict()
+        
+        # Prepare arguments for parallel execution
+        file_args = [
+            (deltas_file, team_dict, opponent_dict, points_per_test, base_serving, baseline_win_rate)
+            for deltas_file in deltas_files
+        ]
+        
+        # Use number of CPU cores, but cap at reasonable maximum
+        max_workers = min(multiprocessing.cpu_count(), len(deltas_files), 8)
         
         try:
-            with open(deltas_path, 'r') as f:
-                deltas_data = yaml.safe_load(f)
-            
-            if not deltas_data:
-                print(f"Warning: Empty or invalid deltas file: {deltas_file}")
-                continue
-            
-            # Create modified team with ALL deltas applied together
-            modified_team_data = copy.deepcopy(team.to_dict())
-            
-            # Apply all deltas from this file
-            for parameter, delta_value in deltas_data.items():
-                try:
-                    # Get current value
-                    current_value = get_nested_value(modified_team_data, parameter)
-                    if not isinstance(current_value, (int, float)):
-                        print(f"Warning: Skipping non-numeric parameter '{parameter}' in {deltas_file}")
-                        continue
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all file tests
+                future_to_file = {
+                    executor.submit(_test_single_deltas_file, args): args[0]
+                    for args in file_args
+                }
+                
+                # Collect results as they complete
+                completed_count = 0
+                total_files = len(deltas_files)
+                
+                for future in as_completed(future_to_file):
+                    completed_count += 1
+                    deltas_file, result, error = future.result()
                     
-                    # Calculate new value (additive)
-                    new_value = current_value + delta_value
+                    if error:
+                        print(f"Warning: {error}")
+                    elif result is not None:
+                        file_display_name = Path(deltas_file).stem
+                        results["file_results"][file_display_name] = result
                     
-                    # Apply delta improvement with probability adjustment
-                    modified_team_data = _adjust_probability_distribution(
-                        modified_team_data, 
-                        parameter, 
-                        new_value
-                    )
-                    
-                except KeyError:
-                    print(f"Warning: Parameter '{parameter}' not found in team configuration (file: {deltas_file})")
-                    continue
-                except Exception as e:
-                    print(f"Warning: Error processing parameter '{parameter}' in {deltas_file}: {e}")
-                    continue
+                    # Progress indicator - only show if not formatting as JSON
+                    import sys
+                    if sys.stdout.isatty():
+                        print(f"Progress: {completed_count}/{total_files} files tested")
+        
+        except (OSError, RuntimeError) as e:
+            # ProcessPoolExecutor failed, fall back to sequential processing
+            print(f"Warning: Parallel processing failed ({e}), falling back to sequential")
+            parallel = False
+    
+    if not parallel or len(deltas_files) <= 1 or points_per_test < 50000:
+        # Sequential processing (fallback or when parallel=False/not applicable)
+        for deltas_file in deltas_files:
+            deltas_file, result, error = _test_single_deltas_file((
+                deltas_file, team.to_dict(), opponent.to_dict(), 
+                points_per_test, base_serving, baseline_win_rate
+            ))
             
-            # Create the modified team and calculate win rate
-            modified_team = Team.from_dict(modified_team_data)
-            file_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
-            improvement = file_win_rate - baseline_win_rate
-            
-            # Use filename without extension as display name
-            file_display_name = deltas_path.stem
-            
-            results["file_results"][file_display_name] = {
-                "win_rate": file_win_rate,
-                "improvement": improvement,
-                "file_path": deltas_file,
-                "deltas_count": len(deltas_data)
-            }
-            
-        except Exception as e:
-            print(f"Warning: Error processing file {deltas_file}: {e}")
-            continue
+            if error:
+                print(f"Warning: {error}")
+            elif result is not None:
+                file_display_name = Path(deltas_file).stem
+                results["file_results"][file_display_name] = result
     
     return results
 
 
+def _test_single_parameter(args_tuple):
+    """Helper function to test a single parameter - designed for parallel execution"""
+    (parameter, current_value, team_dict, opponent_dict, change_value, 
+     points_per_test, base_serving, baseline_win_rate) = args_tuple
+    
+    try:
+        # Recreate team objects from dictionaries (needed for multiprocessing)
+        team = Team.from_dict(team_dict)
+        opponent = Team.from_dict(opponent_dict)
+        
+        # Calculate new value (additive)
+        new_value = current_value + change_value
+        
+        # Create modified team
+        modified_team_data = copy.deepcopy(team_dict)
+        
+        # Apply parameter improvement with probability adjustment
+        modified_team_data = _adjust_probability_distribution(
+            modified_team_data, 
+            parameter, 
+            new_value
+        )
+        modified_team = Team.from_dict(modified_team_data)
+        
+        # Calculate win rate with parameter improvement
+        new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+        improvement = new_win_rate - baseline_win_rate
+        
+        return parameter, {
+            "win_rate": new_win_rate,
+            "improvement": improvement,
+            "current_value": current_value,
+            "change_value": change_value,
+            "new_value": new_value
+        }
+        
+    except Exception as e:
+        print(f"Warning: Error processing parameter '{parameter}': {e}")
+        return parameter, None
+
+
 def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_per_test: int = 100000,
-                       base_serving: str = "A") -> dict:
+                       base_serving: str = "A", parallel: bool = True) -> dict:
     """
     Analyze impact of changing every probability parameter by a fixed amount.
     
@@ -294,6 +407,7 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
         change_value: Amount to add to each probability (e.g., 0.05 for 5%)
         points_per_test: Number of points to simulate per test (default: 100000)
         base_serving: Which team serves ("A" or "B")
+        parallel: Use parallel processing for parameter testing (default: True)
         
     Returns:
         Dictionary with baseline and all parameter results
@@ -303,6 +417,7 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
     
     # Get all numeric probability parameters
     team_dict = team.to_dict()
+    opponent_dict = opponent.to_dict()
     
     def extract_probability_params(d, prefix=''):
         """Extract all numeric probability parameters with dot notation paths"""
@@ -324,38 +439,83 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
         "total_parameters": len(all_params)
     }
     
-    # Test each parameter
-    for parameter, current_value in all_params.items():
+    # Only use parallel processing for larger workloads where the overhead is worth it
+    if parallel and len(all_params) > 1 and points_per_test >= 50000:
+        # Parallel processing using ProcessPoolExecutor for CPU-bound simulation work
+        # Prepare arguments for parallel execution
+        param_args = [
+            (parameter, current_value, team_dict, opponent_dict, change_value,
+             points_per_test, base_serving, baseline_win_rate)
+            for parameter, current_value in all_params.items()
+        ]
+        
+        # Use number of CPU cores, but cap at reasonable maximum
+        max_workers = min(multiprocessing.cpu_count(), len(all_params), 8)
+        
         try:
-            # Calculate new value (additive)
-            new_value = current_value + change_value
-            
-            # Create modified team
-            modified_team_data = copy.deepcopy(team.to_dict())
-            
-            # Apply parameter improvement with probability adjustment
-            modified_team_data = _adjust_probability_distribution(
-                modified_team_data, 
-                parameter, 
-                new_value
-            )
-            modified_team = Team.from_dict(modified_team_data)
-            
-            # Calculate win rate with parameter improvement
-            new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
-            improvement = new_win_rate - baseline_win_rate
-            
-            results["parameter_improvements"][parameter] = {
-                "win_rate": new_win_rate,
-                "improvement": improvement,
-                "current_value": current_value,
-                "change_value": change_value,
-                "new_value": new_value
-            }
-            
-        except Exception as e:
-            print(f"Warning: Error processing parameter '{parameter}': {e}")
-            continue
+            with ProcessPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all parameter tests
+                future_to_param = {
+                    executor.submit(_test_single_parameter, args): args[0]
+                    for args in param_args
+                }
+                
+                # Collect results as they complete
+                completed_count = 0
+                total_params = len(all_params)
+                
+                for future in as_completed(future_to_param):
+                    completed_count += 1
+                    parameter_name, result = future.result()
+                    
+                    if result is not None:
+                        results["parameter_improvements"][parameter_name] = result
+                    
+                    # Optional progress indicator (every 10 parameters) - only show if not formatting as JSON
+                    if completed_count % 10 == 0 or completed_count == total_params:
+                        import sys
+                        # Only print progress if stdout is a terminal (not being captured)
+                        if sys.stdout.isatty():
+                            print(f"Progress: {completed_count}/{total_params} parameters tested")
+        
+        except (OSError, RuntimeError) as e:
+            # ProcessPoolExecutor failed, fall back to sequential processing
+            print(f"Warning: Parallel processing failed ({e}), falling back to sequential")
+            parallel = False
+    
+    if not parallel or len(all_params) <= 1 or points_per_test < 50000:
+        # Sequential processing (fallback or when parallel=False/not applicable)
+        for parameter, current_value in all_params.items():
+            try:
+                # Calculate new value (additive)
+                new_value = current_value + change_value
+                
+                # Create modified team
+                modified_team_data = copy.deepcopy(team.to_dict())
+                
+                # Apply parameter improvement with probability adjustment
+                modified_team_data = _adjust_probability_distribution(
+                    modified_team_data, 
+                    parameter, 
+                    new_value
+                )
+                modified_team = Team.from_dict(modified_team_data)
+                
+                # Calculate win rate with parameter improvement
+                new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+                improvement = new_win_rate - baseline_win_rate
+                
+                results["parameter_improvements"][parameter] = {
+                    "win_rate": new_win_rate,
+                    "improvement": improvement,
+                    "current_value": current_value,
+                    "change_value": change_value,
+                    "new_value": new_value
+                }
+                
+            except Exception as e:
+                print(f"Warning: Error processing parameter '{parameter}': {e}")
+                continue
     
     return results
 

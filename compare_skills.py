@@ -25,15 +25,21 @@ class Colors:
     UNDERLINE = '\033[4m'
     END = '\033[0m'
 
-def run_skills_analysis(run_number: int, speed_flag: str = "--accurate") -> Tuple[Dict[str, Any], float]:
+def run_skills_analysis(run_number: int, points: int = None, speed_flag: str = "--accurate") -> Tuple[Dict[str, Any], float]:
     """Run a single skills analysis and return the results and duration."""
-    speed_name = {"--quick": "10k", "--accurate": "200k"}.get(speed_flag, "100k")
-    print(f"{Colors.CYAN}Running skills analysis {run_number} ({speed_name} points)...{Colors.END}")
+    if points:
+        points_desc = f"{points//1000}k" if points >= 1000 else str(points)
+    else:
+        points_desc = {"--quick": "10k", "--accurate": "200k"}.get(speed_flag, "100k")
+    print(f"{Colors.CYAN}Running skills analysis {run_number} ({points_desc} points)...{Colors.END}")
     
     start_time = time.time()
     
     # Run the skills analysis with JSON output
-    cmd = ["./bvsim", "skills", speed_flag, "--format", "json"]
+    if points:
+        cmd = ["./bvsim", "skills", "--points", str(points), "--format", "json"]
+    else:
+        cmd = ["./bvsim", "skills", speed_flag, "--format", "json"]
     result = subprocess.run(cmd, capture_output=True, text=True)
     
     if result.returncode != 0:
@@ -196,17 +202,25 @@ def main():
     parser = argparse.ArgumentParser(description='Compare two bvsim skills analyses')
     parser.add_argument('--quick', action='store_true', help='Use quick analysis (10k points)')
     parser.add_argument('--accurate', action='store_true', help='Use accurate analysis (200k points)')
+    parser.add_argument('--points', type=int, help='Specify custom number of points per analysis')
     args = parser.parse_args()
     
-    # Determine speed flag
-    if args.quick:
+    # Determine analysis parameters
+    if args.points:
+        speed_flag = None
+        points = args.points
+        points_desc = f"{points//1000}k points each" if points >= 1000 else f"{points} points each"
+    elif args.quick:
         speed_flag = "--quick"
+        points = None
         points_desc = "10k points each"
     elif args.accurate:
-        speed_flag = "--accurate" 
+        speed_flag = "--accurate"
+        points = None
         points_desc = "200k points each"
     else:
         speed_flag = "--accurate"  # Default to accurate
+        points = None
         points_desc = "200k points each"
     
     print(f"{Colors.BOLD}BVSim Skills Analysis Comparison Tool{Colors.END}")
@@ -221,8 +235,8 @@ def main():
         # Create a thread pool to run both analyses concurrently
         with ThreadPoolExecutor(max_workers=2) as executor:
             # Submit both tasks
-            future1 = executor.submit(run_skills_analysis, 1, speed_flag)
-            future2 = executor.submit(run_skills_analysis, 2, speed_flag)
+            future1 = executor.submit(run_skills_analysis, 1, points, speed_flag)
+            future2 = executor.submit(run_skills_analysis, 2, points, speed_flag)
             
             # Wait for both to complete and get results
             results = {}
@@ -258,8 +272,9 @@ def main():
         print(f"Large differences (>10%) may indicate statistical variance or insufficient sample size.")
         print(f"Skills are ordered by average impact (most important training targets first).{Colors.END}")
         print(f"\n{Colors.BOLD}Usage:{Colors.END}")
-        print(f"  python3 compare_skills.py --quick    # Fast comparison (10k points, ~4 seconds parallel)")
-        print(f"  python3 compare_skills.py --accurate # Full comparison (200k points, ~2 minutes parallel)")
+        print(f"  python3 compare_skills.py --quick      # Fast comparison (10k points, ~4 seconds parallel)")
+        print(f"  python3 compare_skills.py --accurate   # Full comparison (200k points, ~2 minutes parallel)")
+        print(f"  python3 compare_skills.py --points 50000 # Custom comparison (50k points, ~30 seconds parallel)")
         
     except KeyboardInterrupt:
         print(f"\n{Colors.RED}Script interrupted by user{Colors.END}")

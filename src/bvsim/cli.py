@@ -160,7 +160,8 @@ def cmd_skills(args):
                 team=team,
                 opponent=opponent,
                 change_value=change_value,
-                points_per_test=points
+                points_per_test=points,
+                parallel=not args.no_parallel
             )
             
             # Output results
@@ -534,6 +535,7 @@ def main(argv=None):
     parser_skills.add_argument('--accurate', action='store_true', help='High precision (200k points)')
     parser_skills.add_argument('--points', type=int, help='Custom points per test')
     parser_skills.add_argument('--format', choices=['json', 'text'], default='text', help='Output format')
+    parser_skills.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (for testing)')
     parser_skills.set_defaults(func=cmd_skills)
     
     # bvsim compare - team comparisons

@@ -154,6 +154,267 @@ def run_single_skills_analysis(team: Team, opponent: Team, change_value: float, 
     return results, duration
 
 
+def run_single_custom_analysis(team: Team, opponent: Team, delta_files: List[str], points_per_test: int, run_number: int) -> Tuple[Dict[str, Any], float]:
+    """Run a single custom scenario analysis and return the results and duration."""
+    start_time = time.time()
+    
+    results = multi_delta_skill_analysis(
+        team=team,
+        opponent=opponent,
+        deltas_files=delta_files,
+        points_per_test=points_per_test
+    )
+    
+    duration = time.time() - start_time
+    return results, duration
+
+
+def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_durations: List[float], delta_files: List[str], points: int):
+    """Print statistical analysis of custom scenario impacts across multiple runs with confidence intervals."""
+    
+    num_runs = len(all_results)
+    avg_duration = statistics.mean(all_durations)
+    
+    print(f"\n{Colors.BOLD}{Colors.UNDERLINE}CUSTOM SCENARIOS STATISTICAL ANALYSIS{Colors.END}")
+    print(f"Number of Runs: {num_runs} | Average Duration: {avg_duration:.2f}s")
+    
+    # Extract baseline win rates from all runs
+    baseline_rates = [result.get("baseline_win_rate", 0) for result in all_results]
+    baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(baseline_rates)
+    
+    print(f"Baseline Win Rate: {baseline_mean:.1f}% [95% CI: {baseline_lower:.1f}% - {baseline_upper:.1f}%]")
+    print(f"Testing {len(delta_files)} custom scenarios ({points:,} points each)")
+    print("=" * 140)
+    
+    # Collect scenario data across runs
+    scenario_data = {}
+    
+    # Get scenario names from first run
+    first_run_files = all_results[0].get("file_results", {})
+    
+    for scenario_name in first_run_files.keys():
+        improvements = []
+        win_rates = []
+        
+        # Collect data from all runs for this scenario
+        for result in all_results:
+            file_results = result.get("file_results", {})
+            if scenario_name in file_results:
+                improvement = file_results[scenario_name].get("improvement", 0)
+                win_rate = file_results[scenario_name].get("win_rate", 0)
+                improvements.append(improvement)
+                win_rates.append(win_rate)
+        
+        if improvements:
+            # Point impact statistics
+            point_mean, point_lower, point_upper = calculate_confidence_interval(improvements)
+            
+            # Calculate match win rate impacts
+            match_improvements = []
+            for point_improvement in improvements:
+                match_impact = point_to_match_impact(point_improvement)
+                match_improvements.append(match_impact)
+            
+            # Match impact statistics
+            match_mean, match_lower, match_upper = calculate_confidence_interval(match_improvements)
+            
+            # Check for statistical significance
+            is_significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
+            
+            scenario_data[scenario_name] = {
+                'scenario': scenario_name,
+                'point_mean': point_mean,
+                'point_lower': point_lower,
+                'point_upper': point_upper,
+                'match_mean': match_mean,
+                'match_lower': match_lower,
+                'match_upper': match_upper,
+                'is_significant': is_significant,
+                'num_runs': len(improvements)
+            }
+    
+    # Sort by match impact (most positive first)
+    scenario_comparisons = list(scenario_data.values())
+    scenario_comparisons.sort(key=lambda x: x['match_mean'], reverse=True)
+    
+    # Print table header
+    print(f"{Colors.BOLD}Scenario File                                      Point Impact  Match Impact  95% Match CI              Significant{Colors.END}")
+    print(f"{Colors.BOLD}                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   {Colors.END}")
+    print("-" * 140)
+    
+    # Print each scenario with its confidence interval
+    significant_scenarios = []
+    for i, scenario in enumerate(scenario_comparisons):
+        scenario_name = scenario['scenario']
+        point_mean = scenario['point_mean']
+        point_lower = scenario['point_lower']
+        point_upper = scenario['point_upper']
+        match_mean = scenario['match_mean']
+        match_lower = scenario['match_lower'] 
+        match_upper = scenario['match_upper']
+        is_sig = scenario['is_significant']
+        
+        # Color coding based on statistical significance
+        if is_sig:
+            if match_mean > 0:
+                color = Colors.GREEN
+            else:
+                color = Colors.RED
+            significant_scenarios.append(scenario)
+        else:
+            color = Colors.YELLOW
+        
+        # Format significance indicator
+        sig_text = "YES" if is_sig else "No"
+        
+        # Format scenario name (truncate if too long)
+        display_name = scenario_name
+        if len(display_name) > 50:
+            display_name = display_name[:47] + "..."
+        
+        print(f"{color}{display_name:<50} {point_mean:+6.2f}%     {match_mean:+6.2f}%     [{match_lower:+6.2f}% - {match_upper:+6.2f}%]       {sig_text:<3}{Colors.END}")
+    
+    print("-" * 140)
+    
+    # Visual confidence interval chart
+    print(f"\n{Colors.BOLD}MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Scenarios):{Colors.END}")
+    print("Match % │")
+    
+    # Calculate chart scale using match impact values
+    all_values = []
+    for scenario in scenario_comparisons:
+        all_values.extend([scenario['match_lower'], scenario['match_mean'], scenario['match_upper']])
+    
+    if all_values:
+        chart_min = min(all_values)
+        chart_max = max(all_values)
+        chart_range = chart_max - chart_min
+        
+        # Add padding
+        padding = chart_range * 0.1 if chart_range > 0 else 1.0
+        chart_min -= padding
+        chart_max += padding
+        chart_range = chart_max - chart_min
+        
+        # Chart width (characters)
+        chart_width = 80
+        
+        # Draw each scenario's confidence interval
+        for scenario in scenario_comparisons:
+            scenario_name = scenario['scenario']
+            match_mean = scenario['match_mean']
+            match_lower = scenario['match_lower']
+            match_upper = scenario['match_upper']
+            is_sig = scenario['is_significant']
+            
+            # Calculate positions
+            if chart_range > 0:
+                mean_pos = int((match_mean - chart_min) / chart_range * chart_width)
+                lower_pos = int((match_lower - chart_min) / chart_range * chart_width)
+                upper_pos = int((match_upper - chart_min) / chart_range * chart_width)
+                zero_pos = int((0 - chart_min) / chart_range * chart_width) if chart_min <= 0 <= chart_max else -1
+            else:
+                mean_pos = chart_width // 2
+                lower_pos = chart_width // 2
+                upper_pos = chart_width // 2
+                zero_pos = chart_width // 2
+            
+            # Build the visual line
+            line = [' '] * chart_width
+            
+            # Draw confidence interval bar
+            for i in range(max(0, lower_pos), min(chart_width, upper_pos + 1)):
+                line[i] = '─'
+            
+            # Draw zero line if visible
+            if 0 <= zero_pos < chart_width:
+                line[zero_pos] = '┊'
+            
+            # Draw mean point
+            if 0 <= mean_pos < chart_width:
+                if is_sig:
+                    line[mean_pos] = '●'  # Solid dot for significant
+                else:
+                    line[mean_pos] = '○'  # Hollow dot for non-significant
+            
+            # Color the entire line
+            if is_sig:
+                color = Colors.GREEN if match_mean > 0 else Colors.RED
+            else:
+                color = Colors.YELLOW
+            
+            print(f"         │ {color}{''.join(line)}{Colors.END} {scenario_name}")
+        
+        # Add scale markers (similar to previous function)
+        print(f"         │{'─' * chart_width}")
+        scale_line = ' ' * 9 + '│'
+        
+        markers = []
+        if chart_range > 0:
+            markers.append((0, f"{chart_min:+.1f}%"))
+            if chart_min <= 0 <= chart_max:
+                zero_pos = int((0 - chart_min) / chart_range * chart_width)
+                markers.append((zero_pos, "0%"))
+            markers.append((chart_width-1, f"{chart_max:+.1f}%"))
+        
+        markers.sort()
+        scale_positions = [' '] * chart_width
+        
+        for pos, label in markers:
+            if 0 <= pos < chart_width:
+                start_pos = max(0, pos - len(label)//2)
+                end_pos = min(chart_width, start_pos + len(label))
+                
+                overlap = False
+                for i in range(start_pos, end_pos):
+                    if i < len(scale_positions) and scale_positions[i] != ' ':
+                        overlap = True
+                        break
+                
+                if not overlap and end_pos - start_pos == len(label):
+                    for i, char in enumerate(label):
+                        if start_pos + i < chart_width:
+                            scale_positions[start_pos + i] = char
+        
+        scale_line += ''.join(scale_positions)
+        print(scale_line)
+        
+        # Legend
+        print(f"\nLegend: {Colors.GREEN}●{Colors.END} Significant positive  {Colors.RED}●{Colors.END} Significant negative  {Colors.YELLOW}○{Colors.END} Non-significant  ┊ Zero line")
+    
+    # Summary statistics
+    total_scenarios = len(scenario_comparisons)
+    significant_positive = len([s for s in significant_scenarios if s['match_mean'] > 0])
+    significant_negative = len([s for s in significant_scenarios if s['match_mean'] < 0])
+    
+    print(f"\n{Colors.BOLD}STATISTICAL SUMMARY:{Colors.END}")
+    print(f"Total scenarios analyzed: {total_scenarios}")
+    print(f"Statistically significant positive impacts: {significant_positive}")
+    print(f"Statistically significant negative impacts: {significant_negative}")
+    
+    if scenario_comparisons:
+        best_scenario = scenario_comparisons[0]
+        print(f"Best scenario: {Colors.GREEN}{best_scenario['scenario']}{Colors.END}")
+        print(f"Point Impact: {Colors.GREEN}{best_scenario['point_mean']:+5.2f}% [{best_scenario['point_lower']:+5.2f}% - {best_scenario['point_upper']:+5.2f}%]{Colors.END}")
+        print(f"Match Impact: {Colors.GREEN}{best_scenario['match_mean']:+5.2f}% [{best_scenario['match_lower']:+5.2f}% - {best_scenario['match_upper']:+5.2f}%]{Colors.END}")
+    
+    # Show significant scenarios for training focus
+    if significant_scenarios:
+        print(f"\n{Colors.BOLD}RECOMMENDED TRAINING SCENARIOS:{Colors.END}")
+        for i, scenario in enumerate(significant_scenarios[:5]):  # Top 5
+            scenario_name = scenario['scenario']
+            point_mean = scenario['point_mean']
+            match_mean = scenario['match_mean']
+            point_lower = scenario['point_lower']
+            point_upper = scenario['point_upper']
+            match_lower = scenario['match_lower']
+            match_upper = scenario['match_upper']
+            
+            color = Colors.GREEN if match_mean > 0 else Colors.RED
+            print(f"{i+1}. {color}{scenario_name}:{Colors.END}")
+            print(f"   {color}Point: {point_mean:+5.2f}% [{point_lower:+5.2f}% - {point_upper:+5.2f}%] | Match: {match_mean:+5.2f}% [{match_lower:+5.2f}% - {match_upper:+5.2f}%]{Colors.END}")
+
+
 def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_durations: List[float], change_value: float, points: int):
     """Print a statistical analysis of skill impacts across multiple runs with confidence intervals."""
     
@@ -511,55 +772,79 @@ def cmd_skills(args):
         # Determine runs - default is ALWAYS 5 unless explicitly overridden
         num_runs = args.runs or 5
         
-        # Always use statistical analysis mode UNLESS using custom analysis
+        # Always use statistical analysis mode including for custom analysis
         if args.custom:
-            # Multi-file custom deltas analysis
-            results = multi_delta_skill_analysis(
-                team=team,
-                opponent=opponent,
-                deltas_files=args.custom,
-                points_per_test=points
-            )
+            # Custom scenarios statistical analysis
+            points_desc = f"{points//1000}k points each" if points >= 1000 else f"{points} points each"
             
-            # Output results
-            if args.format == 'json':
-                print(json.dumps(results, indent=2))
-            else:
-                file_count = len(results['file_results'])
-                file_names = ', '.join(args.custom)
-                print(f"Multi-File Skill Impact Analysis ({points:,} points each):")
-                print(f"Testing {file_count} custom improvement files: {file_names}")
-                print(f"Baseline win rate: {results['baseline_win_rate']:.1f}%")
-                print("")
+            print(f"{Colors.BOLD}Custom Scenarios Statistical Analysis{Colors.END}")
+            print(f"Running {num_runs} scenario analyses ({points_desc}) for statistical comparison...")
+            
+            total_start_time = time.time()
+            
+            # Run multiple custom analyses in parallel
+            try:
+                print(f"{Colors.CYAN}Starting {num_runs} custom scenario analyses in parallel...{Colors.END}")
                 
-                # Sort files by improvement (descending)
-                sorted_files = sorted(
-                    results['file_results'].items(),
-                    key=lambda x: x[1]['improvement'],
-                    reverse=True
-                )
-                
-                # Calculate max file name width for proper table formatting
-                if sorted_files:
-                    max_name_width = max(len(file_name) for file_name, _ in sorted_files)
-                    name_width = max(15, min(max_name_width, 40))  # Min 15, max 40 chars
-                else:
-                    name_width = 15
-                
-                # Calculate total table width
-                total_width = 4 + 1 + name_width + 1 + 9 + 1 + 12  # rank + space + name + space + win_rate + space + improvement
-                
-                print(f"{'Rank':<4} {'Configuration':<{name_width}} {'Win Rate':<9} {'Improvement'}")
-                print("-" * total_width)
-                
-                for i, (file_name, data) in enumerate(sorted_files, 1):
-                    improvement = data['improvement']
-                    win_rate = data['win_rate']
+                # Create a thread pool to run all analyses concurrently
+                max_workers = min(num_runs, 8)  # Cap at 8 concurrent analyses
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    # Submit all tasks
+                    futures = [
+                        executor.submit(run_single_custom_analysis, team, opponent, args.custom, points, i+1)
+                        for i in range(num_runs)
+                    ]
                     
-                    print(f"{i:<4} {file_name:<{name_width}} {win_rate:<8.1f}% {improvement:+8.1f}%")
+                    # Wait for all to complete and collect results
+                    all_results = []
+                    all_durations = []
+                    completed_count = 0
+                    
+                    for future in as_completed(futures):
+                        completed_count += 1
+                        run_data, duration = future.result()
+                        all_results.append(run_data)
+                        all_durations.append(duration)
+                        print(f"{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}")
                 
-                print(f"\nAnalysis completed. Each test simulated {points:,} points.")
-                print(f"Each configuration applies all deltas from its file together.")
+                # Display statistical analysis
+                if args.format == 'json':
+                    # For JSON output, combine all results
+                    combined_results = {
+                        "custom_statistical_analysis": True,
+                        "num_runs": num_runs,
+                        "scenario_files": args.custom,
+                        "points_per_test": points,
+                        "individual_runs": all_results,
+                        "execution_summary": {
+                            "total_duration": time.time() - total_start_time,
+                            "average_duration": statistics.mean(all_durations),
+                            "runs_completed": num_runs
+                        }
+                    }
+                    print(json.dumps(combined_results, indent=2))
+                else:
+                    print_custom_statistical_analysis(all_results, all_durations, args.custom, points)
+                    
+                    total_duration = time.time() - total_start_time
+                    avg_duration = statistics.mean(all_durations)
+                    
+                    print(f"\n{Colors.BOLD}EXECUTION SUMMARY:{Colors.END}")
+                    print(f"Total script execution time: {Colors.GREEN}{total_duration:.2f} seconds{Colors.END}")
+                    print(f"Average analysis time: {Colors.GREEN}{avg_duration:.2f} seconds{Colors.END}")
+                    print(f"Number of runs completed: {Colors.GREEN}{num_runs}{Colors.END}")
+                    
+                    # Statistical note
+                    print(f"\n{Colors.YELLOW}Statistical Analysis: Confidence intervals show the range where the true scenario impact likely falls.")
+                    print(f"Scenarios marked 'YES' have statistically significant impacts (confidence interval doesn't include 0).") 
+                    print(f"Focus training on scenarios with significant positive impacts.{Colors.END}")
+                
+            except KeyboardInterrupt:
+                print(f"\n{Colors.RED}Custom scenario analysis interrupted by user{Colors.END}")
+                return 130
+            except Exception as e:
+                print(f"\n{Colors.RED}Error in custom scenario analysis: {e}{Colors.END}")
+                return 1
         else:
             # ALWAYS use statistical analysis mode (with default 5 runs)
             points_desc = f"{points//1000}k points each" if points >= 1000 else f"{points} points each"

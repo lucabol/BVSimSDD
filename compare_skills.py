@@ -207,6 +207,117 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     print("-" * 120)
     
+    # Visual confidence interval chart
+    print(f"\n{Colors.BOLD}CONFIDENCE INTERVAL CHART (All Skills):{Colors.END}")
+    print("Impact % │")
+    
+    # Use all skills, already sorted by mean improvement
+    chart_skills = skill_comparisons
+    
+    # Calculate chart scale
+    all_values = []
+    for skill in chart_skills:
+        all_values.extend([skill['lower_ci'], skill['mean_improvement'], skill['upper_ci']])
+    
+    if all_values:
+        chart_min = min(all_values)
+        chart_max = max(all_values)
+        chart_range = chart_max - chart_min
+        
+        # Add padding
+        padding = chart_range * 0.1 if chart_range > 0 else 1.0
+        chart_min -= padding
+        chart_max += padding
+        chart_range = chart_max - chart_min
+        
+        # Chart width (characters)
+        chart_width = 80
+        
+        # Draw each skill's confidence interval
+        for skill in chart_skills:
+            param_name = format_parameter_name(skill['parameter'])
+            mean_imp = skill['mean_improvement']
+            lower_ci = skill['lower_ci']
+            upper_ci = skill['upper_ci']
+            is_sig = skill['is_significant']
+            
+            # Calculate positions (0 to chart_width)
+            if chart_range > 0:
+                mean_pos = int((mean_imp - chart_min) / chart_range * chart_width)
+                lower_pos = int((lower_ci - chart_min) / chart_range * chart_width)
+                upper_pos = int((upper_ci - chart_min) / chart_range * chart_width)
+                zero_pos = int((0 - chart_min) / chart_range * chart_width) if chart_min <= 0 <= chart_max else -1
+            else:
+                mean_pos = chart_width // 2
+                lower_pos = chart_width // 2
+                upper_pos = chart_width // 2
+                zero_pos = chart_width // 2
+            
+            # Build the visual line
+            line = [' '] * chart_width
+            
+            # Draw confidence interval bar
+            for i in range(max(0, lower_pos), min(chart_width, upper_pos + 1)):
+                line[i] = '─'
+            
+            # Draw zero line if visible
+            if 0 <= zero_pos < chart_width:
+                line[zero_pos] = '┊'
+            
+            # Draw mean point (overwrites other symbols)
+            if 0 <= mean_pos < chart_width:
+                if is_sig:
+                    line[mean_pos] = '●'  # Solid dot for significant
+                else:
+                    line[mean_pos] = '○'  # Hollow dot for non-significant
+            
+            # Color the entire line
+            if is_sig:
+                color = Colors.GREEN if mean_imp > 0 else Colors.RED
+            else:
+                color = Colors.YELLOW
+            
+            # Use full parameter name (no truncation)
+            display_name = param_name
+            
+            print(f"         │ {color}{''.join(line)}{Colors.END} {display_name}")
+        
+        # Add scale markers
+        print(f"         │{'─' * chart_width}")
+        scale_line = ' ' * 9 + '│'
+        
+        # Add scale markers at key points
+        markers = []
+        if chart_range > 0:
+            # Left end
+            markers.append((0, f"{chart_min:+.1f}%"))
+            # Zero line if visible
+            if chart_min <= 0 <= chart_max:
+                zero_pos = int((0 - chart_min) / chart_range * chart_width)
+                markers.append((zero_pos, "0%"))
+            # Right end
+            markers.append((chart_width-1, f"{chart_max:+.1f}%"))
+        
+        # Sort markers by position to avoid overlap
+        markers.sort()
+        scale_positions = [' '] * chart_width
+        
+        for pos, label in markers:
+            if 0 <= pos < chart_width:
+                # Try to center the label on the position
+                start_pos = max(0, pos - len(label)//2)
+                end_pos = min(chart_width, start_pos + len(label))
+                if end_pos - start_pos == len(label):  # Fits without overlap
+                    for i, char in enumerate(label):
+                        if start_pos + i < chart_width:
+                            scale_positions[start_pos + i] = char
+        
+        scale_line += ''.join(scale_positions)
+        print(scale_line)
+        
+        # Legend
+        print(f"\nLegend: {Colors.GREEN}●{Colors.END} Significant positive  {Colors.RED}●{Colors.END} Significant negative  {Colors.YELLOW}○{Colors.END} Non-significant  ┊ Zero line")
+    
     # Summary statistics
     total_skills = len(skill_comparisons)
     significant_positive = len([s for s in significant_skills if s['mean_improvement'] > 0])

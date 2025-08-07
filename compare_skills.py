@@ -11,6 +11,7 @@ import sys
 import argparse
 import statistics
 import math
+import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Any, List, Tuple
 
@@ -52,6 +53,60 @@ def run_skills_analysis(run_number: int, points: int = None, speed_flag: str = "
     duration = time.time() - start_time
     
     return json.loads(result.stdout), duration
+
+def simulate_volleyball_match(a_win_prob: float = 0.52, max_games: int = 10000, sets_to_win: int = 2, 
+                             points_to_win_standard: int = 21, points_to_win_last: int = 15) -> float:
+    """
+    Simulate volleyball matches and return the win rate for team A.
+    
+    Parameters:
+    a_win_prob: Probability of team A winning a point
+    max_games: Number of matches to simulate
+    sets_to_win: Number of sets to win the match
+    points_to_win_standard: Points to win a set (unless deciding set)
+    points_to_win_last: Points to win the deciding set
+    
+    Returns:
+    Match win rate for team A
+    """
+    a_wins = b_wins = 0
+
+    while a_wins + b_wins < max_games:
+        a_sets = b_sets = 0
+
+        while a_sets < sets_to_win and b_sets < sets_to_win:
+            a_points = b_points = 0
+            points_to_win = points_to_win_standard if a_sets + b_sets < 2 * sets_to_win - 1 else points_to_win_last
+
+            while not (a_points >= points_to_win and a_points - b_points >= 2) and not (b_points >= points_to_win and b_points - a_points >= 2):
+                a_win_point = random.random() < a_win_prob
+                if a_win_point:
+                    a_points += 1
+                else:
+                    b_points += 1
+
+                if a_points >= points_to_win and a_points - b_points >= 2:
+                    a_sets += 1
+                elif b_points >= points_to_win and b_points - a_points >= 2:
+                    b_sets += 1
+
+                if a_sets == sets_to_win:
+                    a_wins += 1
+                    break
+                elif b_sets == sets_to_win:
+                    b_wins += 1
+                    break
+            
+            if a_sets == sets_to_win or b_sets == sets_to_win:
+                break
+
+    return a_wins / (a_wins + b_wins) if (a_wins + b_wins) > 0 else 0.5
+
+def point_to_match_impact(point_improvement: float, baseline_point_rate: float = 0.5) -> float:
+    """Convert point win rate improvement to match win rate improvement."""
+    baseline_match_rate = simulate_volleyball_match(baseline_point_rate)
+    improved_match_rate = simulate_volleyball_match(baseline_point_rate + point_improvement / 100.0)
+    return (improved_match_rate - baseline_match_rate) * 100.0
 
 def calculate_confidence_interval(values: List[float], confidence: float = 0.95) -> Tuple[float, float, float]:
     """Calculate mean and confidence interval for a list of values."""
@@ -134,13 +189,17 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(baseline_rates)
     
     print(f"Baseline Win Rate: {baseline_mean:.1f}% [95% CI: {baseline_lower:.1f}% - {baseline_upper:.1f}%]")
-    print("=" * 120)
+    print("=" * 140)
     
     # Collect all skill improvement data across runs
     skill_data = {}
     
     # Get all parameter names from first run
     first_run_params = all_results[0].get("parameter_improvements", {})
+    
+    # Show progress during match impact calculation
+    total_skills = len(first_run_params)
+    print(f"Calculating match win rate impacts for {total_skills} skills...")
     
     for param_name in first_run_params.keys():
         improvements = []
@@ -155,14 +214,26 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         if improvements:
             mean, lower_ci, upper_ci = calculate_confidence_interval(improvements)
             
-            # Check for statistical significance (CI doesn't include 0)
-            is_significant = (lower_ci > 0 and upper_ci > 0) or (lower_ci < 0 and upper_ci < 0)
+            # Calculate match win rate impacts for all point improvements
+            match_improvements = []
+            for point_improvement in improvements:
+                match_impact = point_to_match_impact(point_improvement)
+                match_improvements.append(match_impact)
+            
+            # Calculate match impact statistics
+            match_mean, match_lower, match_upper = calculate_confidence_interval(match_improvements)
+            
+            # Check for statistical significance based on match impact CI
+            is_significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
             
             skill_data[param_name] = {
                 'parameter': param_name,
                 'mean_improvement': mean,
                 'lower_ci': lower_ci,
                 'upper_ci': upper_ci,
+                'match_mean': match_mean,
+                'match_lower': match_lower,
+                'match_upper': match_upper,
                 'is_significant': is_significant,
                 'num_runs': len(improvements)
             }
@@ -172,9 +243,9 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     skill_comparisons.sort(key=lambda x: x['mean_improvement'], reverse=True)
     
     # Print table header
-    print(f"{Colors.BOLD}Skill Parameter                                    Mean Impact   95% Confidence Interval    Significant{Colors.END}")
-    print(f"{Colors.BOLD}                                                   (% improve)   (Lower - Upper)            (Yes/No)   {Colors.END}")
-    print("-" * 120)
+    print(f"{Colors.BOLD}Skill Parameter                                    Point Impact  Match Impact  95% Match CI              Significant{Colors.END}")
+    print(f"{Colors.BOLD}                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   {Colors.END}")
+    print("-" * 140)
     
     # Print each skill with its confidence interval
     significant_skills = []
@@ -183,6 +254,9 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         mean_imp = skill['mean_improvement']
         lower_ci = skill['lower_ci']
         upper_ci = skill['upper_ci']
+        match_mean = skill['match_mean']
+        match_lower = skill['match_lower'] 
+        match_upper = skill['match_upper']
         is_sig = skill['is_significant']
         
         # Color coding based on statistical significance
@@ -203,21 +277,21 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         # Format parameter name (truncate if too long)
         display_name = format_parameter_name(param_name)
         
-        print(f"{color}{display_name:<50} {mean_imp:+6.2f}%      [{lower_ci:+6.2f}% - {upper_ci:+6.2f}%]        {sig_text:<3}{Colors.END}")
+        print(f"{color}{display_name:<50} {mean_imp:+6.2f}%     {match_mean:+6.2f}%     [{match_lower:+6.2f}% - {match_upper:+6.2f}%]       {sig_text:<3}{Colors.END}")
     
-    print("-" * 120)
+    print("-" * 140)
     
     # Visual confidence interval chart
-    print(f"\n{Colors.BOLD}CONFIDENCE INTERVAL CHART (All Skills):{Colors.END}")
-    print("Impact % │")
+    print(f"\n{Colors.BOLD}MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Skills):{Colors.END}")
+    print("Match % │")
     
     # Use all skills, already sorted by mean improvement
     chart_skills = skill_comparisons
     
-    # Calculate chart scale
+    # Calculate chart scale using match impact values
     all_values = []
     for skill in chart_skills:
-        all_values.extend([skill['lower_ci'], skill['mean_improvement'], skill['upper_ci']])
+        all_values.extend([skill['match_lower'], skill['match_mean'], skill['match_upper']])
     
     if all_values:
         chart_min = min(all_values)
@@ -236,16 +310,17 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         # Draw each skill's confidence interval
         for skill in chart_skills:
             param_name = format_parameter_name(skill['parameter'])
-            mean_imp = skill['mean_improvement']
-            lower_ci = skill['lower_ci']
-            upper_ci = skill['upper_ci']
+            mean_imp = skill['mean_improvement']  # Keep for significance color coding
+            match_mean = skill['match_mean']
+            match_lower = skill['match_lower']
+            match_upper = skill['match_upper']
             is_sig = skill['is_significant']
             
-            # Calculate positions (0 to chart_width)
+            # Calculate positions (0 to chart_width) using match values
             if chart_range > 0:
-                mean_pos = int((mean_imp - chart_min) / chart_range * chart_width)
-                lower_pos = int((lower_ci - chart_min) / chart_range * chart_width)
-                upper_pos = int((upper_ci - chart_min) / chart_range * chart_width)
+                mean_pos = int((match_mean - chart_min) / chart_range * chart_width)
+                lower_pos = int((match_lower - chart_min) / chart_range * chart_width)
+                upper_pos = int((match_upper - chart_min) / chart_range * chart_width)
                 zero_pos = int((0 - chart_min) / chart_range * chart_width) if chart_min <= 0 <= chart_max else -1
             else:
                 mean_pos = chart_width // 2
@@ -295,6 +370,13 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             if chart_min <= 0 <= chart_max:
                 zero_pos = int((0 - chart_min) / chart_range * chart_width)
                 markers.append((zero_pos, "0%"))
+            # Additional markers for better readability
+            quarter_pos = int(chart_width * 0.25)
+            three_quarter_pos = int(chart_width * 0.75)
+            quarter_val = chart_min + chart_range * 0.25
+            three_quarter_val = chart_min + chart_range * 0.75
+            markers.append((quarter_pos, f"{quarter_val:+.1f}%"))
+            markers.append((three_quarter_pos, f"{three_quarter_val:+.1f}%"))
             # Right end
             markers.append((chart_width-1, f"{chart_max:+.1f}%"))
         
@@ -304,10 +386,18 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         
         for pos, label in markers:
             if 0 <= pos < chart_width:
-                # Try to center the label on the position
+                # Try to center the label on the position, avoid overlap
                 start_pos = max(0, pos - len(label)//2)
                 end_pos = min(chart_width, start_pos + len(label))
-                if end_pos - start_pos == len(label):  # Fits without overlap
+                
+                # Check for overlap with existing markers
+                overlap = False
+                for i in range(start_pos, end_pos):
+                    if i < len(scale_positions) and scale_positions[i] != ' ':
+                        overlap = True
+                        break
+                
+                if not overlap and end_pos - start_pos == len(label):
                     for i, char in enumerate(label):
                         if start_pos + i < chart_width:
                             scale_positions[start_pos + i] = char
@@ -333,7 +423,8 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     if skill_comparisons:
         top_skill = skill_comparisons[0]
         print(f"Most impactful skill: {Colors.GREEN}{format_parameter_name(top_skill['parameter'])}{Colors.END}")
-        print(f"Impact: {Colors.GREEN}{top_skill['mean_improvement']:+5.2f}% [{top_skill['lower_ci']:+5.2f}% - {top_skill['upper_ci']:+5.2f}%]{Colors.END}")
+        print(f"Point Impact: {Colors.GREEN}{top_skill['mean_improvement']:+5.2f}% [{top_skill['lower_ci']:+5.2f}% - {top_skill['upper_ci']:+5.2f}%]{Colors.END}")
+        print(f"Match Impact: {Colors.GREEN}{top_skill['match_mean']:+5.2f}% [{top_skill['match_lower']:+5.2f}% - {top_skill['match_upper']:+5.2f}%]{Colors.END}")
     
     # Show only statistically significant high-impact skills
     if significant_skills:
@@ -342,11 +433,15 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         for i, skill in enumerate(high_impact_significant):
             param_name = skill['parameter']
             mean_imp = skill['mean_improvement']
+            match_mean = skill['match_mean']
             lower_ci = skill['lower_ci']
             upper_ci = skill['upper_ci']
+            match_lower = skill['match_lower']
+            match_upper = skill['match_upper']
             
             color = Colors.GREEN if mean_imp > 0 else Colors.RED
-            print(f"{i+1:2d}. {color}{format_parameter_name(param_name)}: {mean_imp:+5.2f}% [{lower_ci:+5.2f}% - {upper_ci:+5.2f}%]{Colors.END}")
+            print(f"{i+1:2d}. {color}{format_parameter_name(param_name)}:{Colors.END}")
+            print(f"    {color}Point: {mean_imp:+5.2f}% [{lower_ci:+5.2f}% - {upper_ci:+5.2f}%] | Match: {match_mean:+5.2f}% [{match_lower:+5.2f}% - {match_upper:+5.2f}%]{Colors.END}")
 
 def main():
     """Main execution function."""

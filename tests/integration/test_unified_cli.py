@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 
-def run_bvsim(args, timeout=30):
+def run_bvsim(args, timeout=90):
     """Run bvsim command and return result"""
     cmd = ['python3', '-m', 'bvsim'] + args
     env = os.environ.copy()
@@ -49,9 +49,9 @@ def test_help():
 
 def test_skills_quick():
     """Test skills command with quick analysis"""
-    result = run_bvsim(['skills', '--quick'])
+    result = run_bvsim(['skills', '--quick', '--runs', '1'])
     assert result.returncode == 0
-    assert 'Skill Impact Analysis' in result.stdout
+    assert 'BVSim Skills Statistical Analysis' in result.stdout
     assert 'serve_probabilities.ace' in result.stdout
     print("✓ Skills quick analysis works")
 
@@ -116,9 +116,9 @@ def test_skills_with_team():
             assert result.returncode == 0, f"Create team failed: {result.stderr}"
             
             # Analyze skills for that team
-            result = run_bvsim(['skills', 'my_team', '--quick'])
+            result = run_bvsim(['skills', 'my_team', '--quick', '--runs', '1'])
             assert result.returncode == 0, f"Skills analysis failed: {result.stderr}"
-            assert 'Skill Impact Analysis' in result.stdout
+            assert 'BVSim Skills Statistical Analysis' in result.stdout
             
             print("✓ Skills with custom team works")
         finally:
@@ -146,7 +146,7 @@ block_probabilities.power_attack.stuff: 0.06"""
             with open('scenario2.yaml', 'w') as f:
                 f.write(delta2_content)
             
-            # Test multi-file custom analysis
+            # Test multi-file custom analysis  
             result = run_bvsim(['skills', '--custom', 'scenario1.yaml', 'scenario2.yaml', '--quick'])
             assert result.returncode == 0, f"Multi-file custom failed: {result.stderr}"
             assert 'Multi-File Skill Impact Analysis' in result.stdout

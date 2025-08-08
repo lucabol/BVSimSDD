@@ -124,6 +124,7 @@ def main():
         ('tests.unit.test_state_machine', 'Unit Tests - State Machine Logic'),
         ('tests.unit.test_rally_scenarios', 'Unit Tests - Rally Scenarios'),
         ('tests.unit.test_set_conditionals', 'Unit Tests - Set Conditionals'),
+        ('tests/test_extreme_statistics.py', 'Unit Tests - Extreme Statistics Behavior'),
     ]
     
     for test_module, description in unit_tests:

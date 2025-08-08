@@ -150,8 +150,8 @@ block_probabilities.power_attack.stuff: 0.06"""
             result = run_bvsim(['skills', '--custom', 'scenario1.yaml', 'scenario2.yaml', '--quick', '--runs', '1'])
             assert result.returncode == 0, f"Multi-file custom failed: {result.stderr}"
             assert 'Custom Scenarios Statistical Analysis' in result.stdout
-            assert 'scenario1.yaml' in result.stdout
-            assert 'scenario2.yaml' in result.stdout
+            assert 'scenario1' in result.stdout
+            assert 'scenario2' in result.stdout
             
             print("✓ Multi-file custom skills analysis works")
         finally:

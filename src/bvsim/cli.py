@@ -691,12 +691,19 @@ def auto_discover_teams() -> List[str]:
         files = glob.glob(pattern)
         team_files.extend([f for f in files if f not in team_files])
     
-    # Filter to only valid team files
+    # Filter to only valid team files with complete probability structures
     valid_teams = []
     for file in team_files:
         try:
-            Team.from_yaml_file(file)
-            valid_teams.append(file)
+            team = Team.from_yaml_file(file)
+            # Validate that the team has complete probability distributions
+            if (team.serve_probabilities and 
+                team.receive_probabilities and 
+                team.attack_probabilities and 
+                team.set_probabilities and
+                team.block_probabilities and 
+                team.dig_probabilities):
+                valid_teams.append(file)
         except:
             continue
             

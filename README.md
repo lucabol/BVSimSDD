@@ -242,13 +242,13 @@ Each scenario applies all improvements from its file together with statistical v
 **Sample output:**
 ```
 Rally Examples (5 rallies): Team A vs Team B
-Format: [Winner] Server→Action(Quality)→Action(Quality)... → Point Type
+Format: [Winner] Team.Action(Quality)→Team.Action(Quality)... → Point Type
 
- 1. [B] A→srv(ok)→B→rcv(pr)→B→set(pr)→B→att(kill) → kill
- 2. [A] B→srv(ok)→A→rcv(gd)→A→set(exc)→A→att(def)→B→blk(def→att)→A→dig(pr)→A→set(pr)→A→att(kill) → kill
- 3. [A] A→srv(ace) → ace
- 4. [A] B→srv(err) → serve_error
- 5. [B] A→srv(ok)→B→rcv(exc)→B→set(pr)→B→att(def)→A→blk(miss)→A→dig(gd)→A→set(gd)→A→att(err) → attack_error
+ 1. [B] A.srv(ok)→B.rcv(pr)→B.set(pr)→B.att(kill) → kill
+ 2. [A] B.srv(ok)→A.rcv(gd)→A.set(exc)→A.att(def)→B.blk(def→att)→A.dig(pr)→A.set(pr)→A.att(kill) → kill
+ 3. [A] A.srv(ace) → ace
+ 4. [A] B.srv(err) → serve_error
+ 5. [B] A.srv(ok)→B.rcv(exc)→B.set(pr)→B.att(def)→A.blk(miss)→A.dig(gd)→A.set(gd)→A.att(err) → attack_error
 
 Legend: srv=serve, rcv=receive, set=set, att=attack, blk=block, dig=dig
         exc=excellent, gd=good, pr=poor, err=error, def=defended

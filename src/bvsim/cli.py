@@ -1195,7 +1195,7 @@ def cmd_examples(args):
         num_rallies = args.count
         
         print(f"Rally Examples ({num_rallies} rallies): {team_a.name} vs {team_b.name}")
-        print(f"Format: [Winner] Server→Action(Quality)→Action(Quality)... → Point Type")
+        print(f"Format: [Winner] Team.Action(Quality)→Team.Action(Quality)... → Point Type")
         print("")
         
         # Generate rallies
@@ -1225,7 +1225,7 @@ def cmd_examples(args):
                     'deflection_to_defense': 'def→def', 'no_touch': 'miss'
                 }.get(state.quality, state.quality)
                 
-                state_parts.append(f"{state.team}→{action_abbrev}({quality_abbrev})")
+                state_parts.append(f"{state.team}.{action_abbrev}({quality_abbrev})")
             
             rally_str += "→".join(state_parts)
             rally_str += f" → {point.point_type}"

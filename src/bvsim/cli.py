@@ -288,6 +288,11 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     if all_values:
         chart_min = min(all_values)
         chart_max = max(all_values)
+        
+        # Always ensure 0% is visible in the chart
+        chart_min = min(chart_min, 0.0)
+        chart_max = max(chart_max, 0.0)
+        
         chart_range = chart_max - chart_min
         
         # Add padding
@@ -534,6 +539,11 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     if all_values:
         chart_min = min(all_values)
         chart_max = max(all_values)
+        
+        # Always ensure 0% is visible in the chart
+        chart_min = min(chart_min, 0.0)
+        chart_max = max(chart_max, 0.0)
+        
         chart_range = chart_max - chart_min
         
         # Add padding

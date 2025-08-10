@@ -1,0 +1,52 @@
+name: "{team_name}"
+serve_probabilities:
+  ace: 0.10
+  in_play: 0.85
+  error: 0.05
+receive_probabilities:
+  in_play_serve:
+    excellent: 0.35
+    good: 0.40
+    poor: 0.20
+    error: 0.05
+set_probabilities:
+  excellent_reception:
+    excellent: 0.69
+    good: 0.25
+    poor: 0.05
+    error: 0.01
+  good_reception:
+    excellent: 0.28
+    good: 0.60
+    poor: 0.10
+    error: 0.02
+  poor_reception:
+    excellent: 0.05
+    good: 0.25
+    poor: 0.67
+    error: 0.03
+attack_probabilities:
+  excellent_set:
+    kill: 0.70
+    error: 0.15
+    defended: 0.15
+  good_set:
+    kill: 0.55
+    error: 0.20
+    defended: 0.25
+  poor_set:
+    kill: 0.30
+    error: 0.35
+    defended: 0.35
+block_probabilities:
+  power_attack:
+    stuff: 0.20
+    deflection_to_attack: 0.15
+    deflection_to_defense: 0.15
+    no_touch: 0.50
+dig_probabilities:
+  deflected_attack:
+    excellent: 0.30
+    good: 0.40
+    poor: 0.25
+    error: 0.05

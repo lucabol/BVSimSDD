@@ -167,11 +167,10 @@ class TestExtremeStatistics(unittest.TestCase):
 
     def test_100_percent_block_stuff(self):
         """Test: If team has 100% block stuff rate against power attacks"""
-        # Team A: Always power attacks
+        # Team A: Normal team (will attack and get blocked)
         team_a_data = self.team_a_template.copy()
-        # Configure Team A to always end up attacking (simplified for test)
         
-        # Team B: 100% stuff blocks
+        # Team B: 100% stuff blocks (Team B will block Team A's attacks)
         team_b_data = self.team_b_template.copy()
         team_b_data['block_probabilities']['power_attack']['stuff'] = 1.0
         team_b_data['block_probabilities']['power_attack']['deflection_to_defense'] = 0.0
@@ -181,20 +180,25 @@ class TestExtremeStatistics(unittest.TestCase):
         team_a = Team.from_dict(team_a_data)
         team_b = Team.from_dict(team_b_data)
         
-        # This test is more complex as we need the rally to reach the attack/block phase
-        # We'll run a smaller number of simulations and check that blocks are working
+        # Team B serves, so Team A receives and attacks (getting blocked by Team B)
         total_points = 50
         team_b_wins = 0
+        stuff_blocks = 0
         
         for i in range(total_points):
-            result = simulate_point(team_a, team_b, serving_team="A", seed=42 + i)
+            result = simulate_point(team_a, team_b, serving_team="B", seed=42 + i)
             if result.winner == "B":
                 team_b_wins += 1
+            if result.point_type == "stuff":
+                stuff_blocks += 1
         
-        # Team B should win some points due to perfect blocking when attacks happen
-        # (Though not all points will reach the attack phase)
+        # Team B should win some points due to perfect blocking when Team A attacks
         win_rate = team_b_wins / total_points
         self.assertGreater(win_rate, 0.1, f"Expected some wins from perfect blocking, got {win_rate:.2%}")
+        
+        # Should see some stuff blocks in the results
+        if stuff_blocks == 0:
+            print(f"Warning: No stuff blocks recorded in {total_points} points")
 
     def test_alternating_serve_advantage(self):
         """Test: Verify that serving advantage works correctly"""

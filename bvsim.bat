@@ -11,27 +11,25 @@ if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 REM Set PYTHONPATH to include the src directory
 set "PYTHONPATH=%SCRIPT_DIR%\src;%PYTHONPATH%"
 
-REM Try python commands in order, use the first one that works
-where python3 >nul 2>&1
-if %errorlevel% equ 0 (
-    python3 -m bvsim %*
-    exit /b %errorlevel%
-)
+REM Try py first (Python Launcher - most reliable on Windows)
+py -m bvsim %* 2>nul
+if %errorlevel% equ 0 exit /b 0
 
-where python >nul 2>&1
-if %errorlevel% equ 0 (
-    python -m bvsim %*
-    exit /b %errorlevel%
-)
+REM Try python3 
+python3 -m bvsim %* 2>nul  
+if %errorlevel% neq 9009 exit /b %errorlevel%
 
-where py >nul 2>&1
-if %errorlevel% equ 0 (
-    py -m bvsim %*
-    exit /b %errorlevel%
-)
+REM Try python (suppress Microsoft Store message)
+python -m bvsim %* 2>nul
+if %errorlevel% neq 9009 exit /b %errorlevel%
 
-REM If no Python found, show helpful error message
-echo ERROR: Python is not installed or not in PATH
+REM If we get here, no Python worked
+echo ERROR: Python is not installed or not accessible
+echo.
 echo Please install Python 3.7+ from https://python.org
 echo Make sure to check "Add Python to PATH" during installation
+echo.
+echo If Python is installed, try running one of these commands directly:
+echo   py -m bvsim --help
+echo   python -m bvsim --help
 exit /b 1

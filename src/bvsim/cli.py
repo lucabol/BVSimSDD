@@ -822,7 +822,9 @@ def cmd_skills(args):
                         run_data, duration = future.result()
                         all_results.append(run_data)
                         all_durations.append(duration)
-                        print(f"{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}")
+                        print(f"\r{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
+                    
+                    print()  # Final newline after all analyses complete
                 
                 # Display statistical analysis
                 if args.format == 'json':
@@ -894,7 +896,9 @@ def cmd_skills(args):
                         run_data, duration = future.result()
                         all_results.append(run_data)
                         all_durations.append(duration)
-                        print(f"{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}")
+                        print(f"\r{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
+                    
+                    print()  # Final newline after all analyses complete
                 
                 # Display statistical analysis
                 if args.format == 'json':

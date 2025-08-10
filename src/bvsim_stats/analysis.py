@@ -331,7 +331,12 @@ def multi_delta_skill_analysis(team: Team, opponent: Team, deltas_files: list, p
                     # Progress indicator - only show if not formatting as JSON
                     import sys
                     if sys.stdout.isatty():
-                        print(f"Progress: {completed_count}/{total_files} files tested")
+                        print(f"\rProgress: {completed_count}/{total_files} files tested", end="", flush=True)
+                
+                # Final newline after progress complete
+                import sys
+                if sys.stdout.isatty():
+                    print()
         
         except (OSError, RuntimeError) as e:
             # ProcessPoolExecutor failed, fall back to sequential processing
@@ -476,7 +481,12 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
                         import sys
                         # Only print progress if stdout is a terminal (not being captured)
                         if sys.stdout.isatty():
-                            print(f"Progress: {completed_count}/{total_params} parameters tested")
+                            print(f"\rProgress: {completed_count}/{total_params} parameters tested", end="", flush=True)
+                
+                # Final newline after progress complete
+                import sys
+                if sys.stdout.isatty():
+                    print()
         
         except (OSError, RuntimeError) as e:
             # ProcessPoolExecutor failed, fall back to sequential processing

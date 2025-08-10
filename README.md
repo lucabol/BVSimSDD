@@ -67,53 +67,107 @@ python3 -m bvsim --version
 
 ## Basic Usage
 
-### 1. Skill Impact Analysis
+### 1. Advanced Skills Impact Analysis
+
+**🎯 NEW: Statistical Analysis with Match Simulation & Confidence Intervals**
+
 ```bash
-# What skills have the biggest impact on winning?
-./bvsim skills                        # Basic analysis (100k points each)
-./bvsim skills --improve 5%           # Test 5% improvement to all skills  
-./bvsim skills --quick                # Fast analysis (10k points)
-./bvsim skills --accurate             # High precision (200k points)
+# Statistical analysis with confidence intervals (NEW!)
+./bvsim skills                        # 5 statistical runs, 200k points each, 95% confidence
+./bvsim skills --improve 10%          # Test 10% improvement with statistical validation
+./bvsim skills --runs 10              # 10 statistical runs for higher confidence
+./bvsim skills --confidence 0.99      # 99% confidence intervals
+
+# Speed options with consistent statistical approach
+./bvsim skills --quick                # Fast: 5 runs × 10k points each
+./bvsim skills --accurate             # High precision: 5 runs × 200k points each
+
+# Team-specific analysis
 ./bvsim skills team_a                 # Analyze specific team vs itself
-./bvsim skills team_a team_b          # Compare two teams
+./bvsim skills team_a team_b          # Compare two teams with statistical rigor
 ```
 
-**Sample output:**
+**NEW Sample Output - Statistical Analysis with Match Impact:**
 ```
-Skill Impact Analysis (100,000 points each):
-Testing 36 parameters with +5.0% improvement
-Baseline win rate: 49.3%
+BVSim Skills Statistical Analysis
+Number of Runs: 5 | Average Duration: 2.8s
+Baseline Win Rate: 50.2% [95% CI: 49.8% - 50.6%]
+Testing +5.0% improvement on 36 parameters (200,000 points each)
 
-Rank Parameter                                     Win Rate  Improvement
----------------------------------------------------------------------------
-1    serve_probabilities.ace                       52.7%     +3.4%
-2    attack_probabilities.excellent_set.kill       51.8%     +2.5%  
-3    block_probabilities.power_attack.no_touch     51.2%     +1.9%
-4    attack_probabilities.good_set.kill            50.9%     +1.6%
-5    receive_probabilities.in_play_serve.excellent 50.7%     +1.4%
+Skill Parameter                                    Point Impact  Match Impact  95% Match CI              Significant
+                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   
+--------------------------------------------------------------------------------------------------------------------------------------------
+serve_probabilities.ace                             +3.24%     +24.15%     [+18.2% - +30.1%]         YES
+attack_probabilities.excellent_set.kill             +2.18%     +16.87%     [+12.4% - +21.3%]         YES  
+receive_probabilities.in_play_serve.excellent       +1.45%     +11.23%     [ +7.8% - +14.7%]         YES
+block_probabilities.power_attack.stuff              +1.21%      +9.34%     [ +5.9% - +12.8%]         YES
+set_probabilities.excellent_reception.excellent     +0.87%      +6.12%     [ +2.1% -  +8.9%]         YES
 
-Focus training on: Serve accuracy, attack from excellent sets, blocking
+MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Skills):
+Match % │
+        │ ●────●     ┊                                                       serve_probabilities.ace
+        │      ●──●  ┊                                                       attack_probabilities.excellent_set.kill
+        │        ●─● ┊                                                       receive_probabilities.in_play_serve.excellent
+        │         ●●─┊                                                       block_probabilities.power_attack.stuff
+        │          ●─┊                                                       set_probabilities.excellent_reception.excellent
+        │────────────────────────────────────────────────────────────────
+        │0%          +10%                    +20%                     +30%
+
+Legend: ● Significant positive  ● Significant negative  ○ Non-significant  ┊ Zero line
+
+STATISTICAL SUMMARY:
+Total skills analyzed: 36
+Statistically significant positive impacts: 12
+Most impactful skill: serve_probabilities.ace
+Point Impact: +3.24% [+2.8% - +3.7%]
+Match Impact: +24.15% [+18.2% - +30.1%]
 ```
 
-#### Custom Improvement Scenarios
+**🔥 Key Features:**
+- **Match Impact Simulation**: Point improvements converted to realistic volleyball match outcomes (21-point sets, win-by-2)
+- **Statistical Confidence**: Multiple runs with confidence intervals show reliability of results
+- **Significance Testing**: Identifies which improvements are statistically meaningful vs random variation
+- **Visual Charts**: Confidence interval charts with zero baseline for easy interpretation
+- **Parallel Processing**: Multiple analyses run simultaneously for speed
+
+#### Custom Improvement Scenarios with Statistical Analysis
+
 ```bash
-# Compare multiple improvement strategies
-./bvsim skills --custom examples/scenario_serve_focused.yaml examples/scenario_attack_focused.yaml examples/scenario_balanced.yaml --quick
+# Compare multiple improvement strategies with statistical validation (NEW!)
+./bvsim skills --custom examples/scenario_serve_focused.yaml examples/scenario_attack_focused.yaml examples/scenario_balanced.yaml
+./bvsim skills --custom improvements/*.yaml --runs 10        # Higher confidence with 10 runs
+./bvsim skills --custom scenario_a.yaml --confidence 0.99   # 99% confidence intervals
 ```
 
-**Multi-file output example:**
+**NEW Multi-file Statistical Output:**
 ```
-Multi-File Skill Impact Analysis (10,000 points each):
-Testing 3 custom improvement files: examples/scenario_serve_focused.yaml, examples/scenario_attack_focused.yaml, examples/scenario_balanced.yaml
-Baseline win rate: 49.1%
+Custom Scenarios Statistical Analysis
+Number of Runs: 5 | Average Duration: 1.8s
+Baseline Win Rate: 50.1% [95% CI: 49.7% - 50.5%]
+Testing 3 custom scenarios (200,000 points each)
 
-Rank Configuration                Win Rate  Improvement
-------------------------------------------------------
-1    scenario_attack_focused      53.6    %     +4.5%
-2    scenario_balanced            52.6    %     +3.5%
-3    scenario_serve_focused       52.2    %     +3.2%
+Scenario File                                      Point Impact  Match Impact  95% Match CI              Significant
+                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   
+--------------------------------------------------------------------------------------------------------------------------------------------
+scenario_attack_focused                             +4.12%     +31.24%     [+26.8% - +35.7%]         YES
+scenario_balanced                                   +3.18%     +23.47%     [+19.2% - +27.8%]         YES
+scenario_serve_focused                              +2.84%     +20.15%     [+16.1% - +24.2%]         YES
 
-Each configuration applies all deltas from its file together.
+MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Scenarios):
+Match % │
+        │ ●───────●  ┊                                                       scenario_attack_focused
+        │       ●──● ┊                                                       scenario_balanced  
+        │        ●─● ┊                                                       scenario_serve_focused
+        │────────────────────────────────────────────────────────────────
+        │0%          +10%                    +20%                     +30%
+
+RECOMMENDED TRAINING SCENARIOS:
+1. scenario_attack_focused:
+   Point: +4.12% [+3.8% - +4.4%] | Match: +31.24% [+26.8% - +35.7%]
+2. scenario_balanced:
+   Point: +3.18% [+2.9% - +3.5%] | Match: +23.47% [+19.2% - +27.8%]
+
+Each scenario applies all improvements from its file together with statistical validation.
 ```
 
 ### 2. Team Comparison
@@ -178,15 +232,19 @@ Teams are defined in YAML files with conditional probability distributions. The 
 - **block_probabilities**: Block outcomes conditional on attack type
 - **dig_probabilities**: Dig quality conditional on block outcome
 
-### Templates
+### Templates (External Configuration Files)
 ```bash
-# Quick team creation
-./bvsim create-team "Team Name"               # Basic template
-./bvsim create-team "Elite Team" --advanced   # Advanced template  
-./bvsim create-team "Custom" --interactive    # Guided creation
+# Quick team creation using external template files
+./bvsim create-team "Team Name"               # Uses templates/basic_team_template.yaml
+./bvsim create-team "Elite Team" --advanced   # Uses templates/advanced_team_template.yaml  
+./bvsim create-team "Custom" --interactive    # Guided creation with templates
 ```
 
-**Key Principle**: All probability distributions must sum to 1.0. The simulator validates this automatically.
+**🆕 Template System:**
+- **External Templates**: Team probabilities stored in `templates/*.yaml` files (not hardcoded)
+- **Easy Customization**: Modify `templates/basic_team_template.yaml` to change default team characteristics
+- **Version Control**: Template changes tracked separately from code changes
+- **Key Principle**: All probability distributions must sum to 1.0. The simulator validates this automatically.
 
 ## Block Mechanics
 
@@ -275,6 +333,11 @@ B:attack(defended) → A:block(no_touch) → A:dig (80%) OR attack lands (20%)
 - **`--accurate`** - High precision (200,000 points)
 - **`--points N`** - Custom point count
 
+### Statistical Options (Skills Analysis)
+- **`--runs N`** - Number of statistical runs (default: 5)
+- **`--confidence 0.XX`** - Confidence level (default: 0.95 for 95%)
+- **`--no-parallel`** - Disable parallel processing (for debugging)
+
 ### Other Options
 - **`--breakdown`** - Detailed statistics and breakdowns
 - **`--format json`** - JSON output for scripting
@@ -298,9 +361,14 @@ All major commands support the same speed options for predictable performance:
 
 | Command | --quick | Default | --accurate |
 |---------|---------|---------|------------|
-| `./bvsim skills` | 10k points | 100k points | 200k points |
+| `./bvsim skills` | 5 runs × 10k points | **5 runs × 200k points** | 5 runs × 200k points |
 | `./bvsim compare` | 10k points | 50k points | 200k points |
 | `./bvsim simulate` | 10k points | 100k points | 200k points |
+
+**🆕 Skills Analysis Statistical Defaults:**
+- **Default behavior**: Always runs 5 statistical repetitions for confidence intervals
+- **High precision by default**: 200k points per run (was 100k) for better statistical power  
+- **Customizable**: Use `--runs N` and `--confidence 0.XX` for different statistical rigor
 
 **Example workflows:**
 ```bash
@@ -321,6 +389,32 @@ All major commands support the same speed options for predictable performance:
 ```
 
 ## Understanding Results
+
+### 🆕 Statistical Analysis Interpretation
+
+**Match Impact vs Point Impact:**
+- **Point Impact**: Direct win rate change from improved skill (e.g., +2.5%)  
+- **Match Impact**: Amplified effect in actual volleyball matches (e.g., +18.3%)
+- **Why the amplification?** In volleyball, small point advantages compound across 21-point sets with win-by-2 rules
+
+**Confidence Intervals:**
+- **95% CI [+15.2% - +21.4%]**: 95% confident the true improvement is in this range
+- **Significant = YES**: Improvement is statistically meaningful, not random variation
+- **Significant = No**: Could be due to random chance, need more data or larger improvement
+
+**Visual Charts:**
+- **●**: Statistically significant result with confidence interval bar
+- **○**: Non-significant result (could be random)
+- **┊**: Zero line - no improvement baseline
+- **Chart always shows 0%**: Easy comparison to "no change" reference point
+
+**Statistical Significance:**
+```
+Point Impact: +2.1% | Match Impact: +16.3% [+12.1% - +20.5%] | Significant: YES
+↑                    ↑                      ↑                   ↑
+Direct effect        Volleyball match      95% confidence      Reliable
+                     amplification         interval            improvement
+```
 
 ### Point Types
 - **ace**: Direct point from serve
@@ -363,24 +457,26 @@ A:serve(in_play) → B:receive(poor) → B:set(poor) → B:attack(defended) → 
 
 ## Common Use Cases
 
-### Coach Preparation
+### Coach Preparation (Updated with Statistical Analysis)
 ```bash
-# 1. Analyze your team's skill priorities
-./bvsim skills my_team --accurate
+# 1. Analyze your team's skill priorities with statistical confidence
+./bvsim skills my_team --runs 10                           # High statistical confidence
+./bvsim skills my_team --improve 10% --confidence 0.99     # Test realistic improvements
 
 # 2. Scout the opponent  
 ./bvsim create-team "Opponent" --output opponent.yaml
 # Edit opponent.yaml based on scouting
 
-# 3. Analyze the matchup
+# 3. Analyze the matchup with match impact simulation
 ./bvsim compare my_team opponent --accurate
 ./bvsim simulate my_team opponent --accurate --breakdown
 
 # 4. Study rally patterns
 ./bvsim examples 10 --teams my_team opponent
 
-# 5. Identify training focus
-./bvsim skills my_team --custom potential_improvements.yaml --accurate
+# 5. Identify training focus with statistical validation
+./bvsim skills my_team --custom improvements/*.yaml --runs 10    # Compare all training scenarios
+# Focus on scenarios marked "Significant: YES" with highest Match Impact
 ```
 
 ### Tournament Analysis
@@ -399,23 +495,31 @@ A:serve(in_play) → B:receive(poor) → B:set(poor) → B:attack(defended) → 
 ./bvsim examples 5 --teams team_a team_b
 ```
 
-### Training Focus
+### Training Focus (Statistical Approach)
 ```bash
-# Find highest-impact skills for training
-./bvsim skills my_team --improve 10% --accurate
+# Find statistically significant high-impact skills for training
+./bvsim skills my_team --improve 10% --runs 10              # High confidence analysis
+# Look for skills marked "Significant: YES" with highest Match Impact
 
-# Test realistic improvements
-./bvsim skills my_team --custom training_goals.yaml --accurate
+# Test realistic training improvements with confidence intervals  
+./bvsim skills my_team --custom training_goals.yaml --confidence 0.99
+# Focus on scenarios with confidence intervals that don't include 0%
 
-# Quick iteration during training
-./bvsim skills my_team --improve 5% --quick
+# Quick statistical iteration during training planning
+./bvsim skills my_team --improve 5% --quick --runs 3        # Fast but still statistical
 
-# Compare multiple improvement scenarios at once
-./bvsim skills my_team --custom scenario_a.yaml scenario_b.yaml scenario_c.yaml --accurate
+# Compare multiple training approaches with statistical validation
+./bvsim skills my_team --custom scenario_a.yaml scenario_b.yaml scenario_c.yaml --runs 10
+# Choose training approach with highest significant Match Impact
 
-# Generate rally examples to see patterns
+# Generate rally examples to understand skill application patterns
 ./bvsim examples 15 --teams my_team
 ```
+
+**🎯 Training Decision Framework:**
+1. **Significant: YES + High Match Impact (>15%)** → Priority training focus
+2. **Significant: YES + Medium Match Impact (5-15%)** → Secondary training goals  
+3. **Significant: No** → Skills that may not be worth intensive training time
 
 **Example deltas.yaml file:**
 ```yaml

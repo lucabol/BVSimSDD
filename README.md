@@ -19,6 +19,8 @@ BVSim helps coaches and analysts understand team performance by simulating reali
 ### Installation
 
 **Method 1: Wrapper Script (Recommended)**
+
+**Linux/macOS:**
 ```bash
 # Clone or download the project
 cd /path/to/bvsim
@@ -31,6 +33,20 @@ chmod +x bvsim
 
 # Optional: Add to PATH for global access (then use just 'bvsim' instead of './bvsim')
 # sudo ln -s $(pwd)/bvsim /usr/local/bin/bvsim
+```
+
+**🆕 Windows:**
+```cmd
+REM Download or clone the project
+cd path\to\bvsim
+
+REM Run the Windows installer
+install-windows.bat
+
+REM Verify installation
+bvsim.bat --version
+
+REM See WINDOWS-SETUP.md for detailed Windows instructions
 ```
 
 **Method 2: Python Package Installation**
@@ -51,6 +67,8 @@ python3 -m bvsim --version
 ```
 
 ### Instant Analysis (No Setup Required)
+
+**Linux/macOS:**
 ```bash
 # Find out which skills matter most - uses built-in team template
 ./bvsim skills
@@ -63,6 +81,21 @@ python3 -m bvsim --version
 
 # See rally examples in action
 ./bvsim examples
+```
+
+**Windows:**
+```cmd
+REM Find out which skills matter most - uses built-in team template
+bvsim.bat skills
+
+REM Quick team comparison using basic templates
+bvsim.bat compare
+
+REM Simulate points between default teams
+bvsim.bat simulate
+
+REM See rally examples in action
+bvsim.bat examples
 ```
 
 ## Basic Usage

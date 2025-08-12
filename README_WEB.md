@@ -8,6 +8,7 @@ A minimal Flask-based web UI exposing the core BVSim simulator features without 
 - Perform skills analysis (full skill impact or custom scenario files) with graphical impact chart
 - Compare multiple teams
 - Generate rally examples
+	- Visual timeline view of rally sequences with action qualities & winner highlighting
 - Download existing team YAML files
 - Collapsible raw JSON output panel (minimized by default) to keep UI clean
 
@@ -59,6 +60,13 @@ Hover tooltips provide exact values. The underlying full JSON remains available 
 
 ### Collapsible Output Panel
 The Output (raw JSON / logs) section is minimized by default to reduce scrolling. Click the Output header badge (Show / Hide) to toggle visibility. Programmatic writes do not auto-expand it— preserving user choice during iterative debugging.
+
+### Rally Timeline Visualization (NEW)
+Using the Rallies panel (Generate button) now produces a graphical timeline: each action (Serve, Receive, Set, Attack, etc.) is a colored card ordered left-to-right with arrows. Card border/background color indicates the acting team (Team A blue, Team B red). A quality pill (excellent, good, ok, error, ace) is color-coded (green, blue, gray, red, purple). The result (point_type) appears as a labeled box at the end. Hovering over any step shows the raw token. The full original sequence string remains in the footer and the full JSON is still visible in the JSON Output panel.
+
+Parsing rules: sequence tokens like `A.att(err)` become {team:A, action:Attack, quality:error}. Quality synonyms are normalized (exc/excellent → excellent, gd/good → good, err/error → error). Unknown or unmatched tokens are ignored (kept in raw text).
+
+Limitations: currently supports single-letter team codes (A/B) or names beginning with those letters. Extend `parseRallySequence` in `static/app.js` to support more complex naming if needed.
 
 ## Notes & Limitations
 - Long-running analyses block request (consider async/job queue for large workloads later)

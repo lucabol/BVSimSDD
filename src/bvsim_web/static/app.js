@@ -396,7 +396,127 @@ async function runExamples() {
     const payload = { team_a, team_b, count: parseInt(count,10) };
     const res = await api('/api/examples', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
+    if (res && Array.isArray(res.rallies)) {
+      renderRallies(res.rallies, { teamA: team_a || 'A', teamB: team_b || 'B' });
+    }
   } catch (e) { out(e.message); }
 }
 
 refreshTeams();
+
+// ---------------- RALLIES VISUALIZATION -----------------
+// Expected rally object shape: { point_type: 'attack_error', sequence: '[A] A.srv(ok)→B.rcv(gd)→B.set(exc)→B.att(err) → attack_error', winner: 'A' }
+// Parsing strategy:
+// 1. Strip leading team indicator like "[A]" capturing initial serving side.
+// 2. Split by arrow symbols (→) ignoring spaces around.
+// 3. Each token of form Team.action(qual) where team is single char (A/B) or name prefix; map quality synonyms.
+// 4. Final token after last arrow may contain point result (e.g. 'attack_error', 'ace'). We already have point_type.
+// 5. Produce steps: { team: 'A'|'B', action: 'srv'|'rcv'|..., quality: 'ok'|'gd'|'err'|'exc'|'ace', raw: original }.
+// Quality normalization: exc/excellent->exc, gd/good->good, ok->ok, err/error->err, ace->ace.
+
+function parseRallySequence(seq) {
+  if (!seq || typeof seq !== 'string') return { steps: [], raw: seq };
+  let original = seq.trim();
+  // Remove leading [A] or [B]
+  let leadingTeam = null;
+  const leadMatch = original.match(/^\[([A-Za-z])\]\s*/);
+  if (leadMatch) {
+    leadingTeam = leadMatch[1];
+    original = original.slice(leadMatch[0].length);
+  }
+  // Split by arrow unicode or fallback '->'
+  const parts = original.split(/(?:→|->)/).map(p => p.trim()).filter(Boolean);
+  const steps = [];
+  const actionRegex = /^([A-Za-z0-9_]+)\.([a-z]{2,5})\(([^)]*)\)$/i; // Team.action(qual)
+  for (let i=0;i<parts.length;i++) {
+    let token = parts[i];
+    // If token contains a space before the last arrow (like 'B.att(err)  '), keep token before spaces
+    token = token.trim();
+    // Attempt extraction
+    const m = token.match(actionRegex);
+    if (m) {
+      let team = m[1];
+      let action = m[2];
+      let qualityRaw = (m[3]||'').toLowerCase();
+      // Normalize team to single letter if it's longer and starts with A or B
+      if (team.length>1 && /^[AB]/i.test(team)) team = team[0];
+      team = team.toUpperCase();
+      action = action.toLowerCase();
+      let quality = qualityRaw;
+      if (/exc|excellent/.test(qualityRaw)) quality = 'exc';
+      else if (/gd|good/.test(qualityRaw)) quality = 'good';
+      else if (/ok/.test(qualityRaw)) quality = 'ok';
+      else if (/err|error/.test(qualityRaw)) quality = 'err';
+      else if (/ace/.test(qualityRaw)) quality = 'ace';
+      steps.push({ team, action, quality, raw: token });
+    } else {
+      // Possibly the result token (e.g., 'attack_error') – ignore here; handled separately
+    }
+  }
+  return { steps, leadingTeam, raw: seq };
+}
+
+function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
+  const container = document.getElementById('ralliesContainer');
+  if (!container) return;
+  container.innerHTML='';
+  container.style.display = rallies.length ? 'block' : 'none';
+  const legend = document.getElementById('ralliesLegend');
+  if (legend) {
+    legend.style.display='block';
+    legend.innerHTML = `
+      <strong style="font-size:.6rem;">Legend</strong><br/>
+      <span class="swatch teamA"></span>${teamA} action&nbsp;&nbsp;
+      <span class="swatch teamB"></span>${teamB} action&nbsp;&nbsp;
+      <span class="swatch exc"></span>excellent <span class="swatch good"></span>good <span class="swatch ok"></span>ok <span class="swatch err"></span>error <span class="swatch ace"></span>ace / terminal
+    `;
+  }
+  rallies.forEach((r, idx) => {
+    const parsed = parseRallySequence(r.sequence || '');
+    const wrap = document.createElement('div');
+    wrap.className = 'rally-wrapper';
+    // Header
+    const header = document.createElement('div'); header.className='rally-header';
+    const title = document.createElement('div'); title.textContent = `Rally ${idx+1}`; header.appendChild(title);
+    const winner = document.createElement('div'); winner.className='winner '+(r.winner==='B'?'team-B':'team-A'); winner.textContent = `Winner: ${r.winner}`; header.appendChild(winner);
+    wrap.appendChild(header);
+    // Timeline
+    const timeline = document.createElement('div'); timeline.className='rally-timeline';
+    parsed.steps.forEach(step => {
+      const stepEl = document.createElement('div');
+      stepEl.className = 'rally-step team-' + (step.team==='B'?'B':'A');
+      // Action label mapping
+      const actMap = { srv:'Serve', rcv:'Receive', set:'Set', att:'Attack', blk:'Block', dig:'Dig', trg:'Target', pass:'Pass', def:'Def', lib:'Lib', unk:'Play' };
+      const actLabel = actMap[step.action] || step.action;
+      const actDiv = document.createElement('div'); actDiv.className='act'; actDiv.textContent = actLabel; stepEl.appendChild(actDiv);
+      if (step.quality) {
+        const qualDiv = document.createElement('div');
+        let cls = 'q-ok';
+        if (step.quality==='exc') cls='q-exc';
+        else if (step.quality==='good') cls='q-good';
+        else if (step.quality==='err') cls='q-err';
+        else if (step.quality==='ace') cls='q-ace';
+        qualDiv.className = 'qual '+cls; qualDiv.textContent = step.quality; stepEl.appendChild(qualDiv);
+      }
+      stepEl.title = step.raw; // tooltip
+      timeline.appendChild(stepEl);
+    });
+    // Result
+    const result = document.createElement('div'); result.className='rally-result';
+    result.textContent = r.point_type || (parsed.steps.slice(-1)[0]?.quality==='ace' ? 'ace' : 'result');
+    timeline.appendChild(result);
+    wrap.appendChild(timeline);
+    // Footer details
+    const footer = document.createElement('div'); footer.className='rally-footer';
+    footer.textContent = r.sequence || '';
+    wrap.appendChild(footer);
+    container.appendChild(wrap);
+  });
+  // Update chart pane title to indicate we are viewing rallies
+  const titleEl = document.getElementById('chartPaneTitle'); if (titleEl) titleEl.textContent='Rallies';
+  // Clear any existing chart visuals
+  clearMatchImpactDisplay();
+  // Re-attach container (clearMatchImpactDisplay clears legend/table but not our container since we appended after chart section markup). Reappend to ensure visibility.
+  const chartSection = document.getElementById('confidenceChartSection');
+  if (chartSection && !container.parentElement) chartSection.appendChild(container);
+}

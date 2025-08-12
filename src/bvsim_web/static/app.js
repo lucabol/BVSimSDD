@@ -186,8 +186,8 @@ function renderSimulationChart(sim) {
   // Add dynamic title content
   const paneTitle = document.getElementById('chartPaneTitle');
   if (paneTitle && sim && sim.summary) {
-    const s = sim.summary; const pts = sim.parameters?.points; 
-    paneTitle.textContent = `Simulation: ${s.team_a} ${s.team_a_win_rate.toFixed(1)}% vs ${s.team_b} ${s.team_b_win_rate.toFixed(1)}% (${fmtInt(pts)} pts)`;
+  const s = sim.summary; const pts = sim.parameters?.points; 
+  paneTitle.textContent = `Simulation: ${s.team_a} ${s.team_a_win_rate.toFixed(1)}% vs ${s.team_b} ${s.team_b_win_rate.toFixed(1)}% (${fmtInt(pts)} pts, breakdown)`;
   }
   if (!sim || !sim.summary) return;
   const canvas = document.getElementById('matchImpactChart');
@@ -220,7 +220,40 @@ function renderSimulationChart(sim) {
   }
   const tableContainer = document.getElementById('matchImpactTableContainer');
   if (tableContainer) {
-    tableContainer.innerHTML = `<table class="match-impact"><thead><tr><th>Team</th><th>Win %</th><th>Wins</th></tr></thead><tbody><tr><td>${team_a}</td><td>${team_a_win_rate.toFixed(2)}%</td><td>${sim.summary.team_a_wins}</td></tr><tr><td>${team_b}</td><td>${team_b_win_rate.toFixed(2)}%</td><td>${sim.summary.team_b_wins}</td></tr></tbody><caption>Single simulation results.</caption></table>`;
+    // Build optional breakdown tables if present
+    let breakdownHTML = '';
+    if (sim.breakdown) {
+      const bd = sim.breakdown;
+      // Point type percentage table
+      if (bd.point_type_breakdown || bd.point_type_percentages) {
+        const ptCounts = bd.point_type_breakdown || {};
+        const ptPerc = bd.point_type_percentages || {};
+        const rows = Object.keys(ptCounts).sort().map(k=> `<tr><td>${k}</td><td>${ptCounts[k]}</td><td>${(ptPerc[k]||0).toFixed(2)}%</td></tr>`).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>%</th></tr></thead><tbody>${rows}</tbody><caption>Distribution of point result types.</caption></table>`;
+      }
+      // Team-specific point type wins
+      if (bd.team_a_point_types || bd.team_b_point_types) {
+        const aPT = bd.team_a_point_types || {}; const bPT = bd.team_b_point_types || {};
+        const types = Array.from(new Set([...Object.keys(aPT), ...Object.keys(bPT)])).sort();
+        const rows = types.map(t=> `<tr><td>${t}</td><td>${aPT[t]||0}</td><td>${bPT[t]||0}</td></tr>`).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>${team_a} Wins</th><th>${team_b} Wins</th></tr></thead><tbody>${rows}</tbody><caption>Point type wins by team.</caption></table>`;
+      }
+      // Serving advantage
+      if (bd.serving_advantage) {
+        const sa = bd.serving_advantage;
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Metric</th><th>${team_a}</th><th>${team_b}</th></tr></thead><tbody>`+
+          `<tr><td>Serve Win %</td><td>${sa.team_a_serve_win_rate.toFixed(2)}%</td><td>${sa.team_b_serve_win_rate.toFixed(2)}%</td></tr>`+
+          `<tr><td>Serves</td><td>${sa.team_a_serves}</td><td>${sa.team_b_serves}</td></tr>`+
+          `</tbody><caption>Serving performance metrics.</caption></table>`;
+      }
+      // Duration by type
+      if (bd.duration_by_type) {
+        const dbt = bd.duration_by_type;
+        const rows = Object.keys(dbt).sort().map(k=>{ const v=dbt[k]; return `<tr><td>${k}</td><td>${v.count}</td><td>${v.average.toFixed(2)}</td><td>${v.min}</td><td>${v.max}</td></tr>`; }).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>Avg Dur</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody><caption>Point duration statistics.</caption></table>`;
+      }
+    }
+    tableContainer.innerHTML = `<table class="match-impact"><thead><tr><th>Team</th><th>Win %</th><th>Wins</th></tr></thead><tbody><tr><td>${team_a}</td><td>${team_a_win_rate.toFixed(2)}%</td><td>${sim.summary.team_a_wins}</td></tr><tr><td>${team_b}</td><td>${team_b_win_rate.toFixed(2)}%</td><td>${sim.summary.team_b_wins}</td></tr></tbody><caption>Single simulation results with breakdown.</caption></table>` + breakdownHTML;
   }
 }
 
@@ -361,7 +394,8 @@ async function simulateCommon(opts) {
     const team_a = document.getElementById('simTeamA').value.trim();
     const team_b = document.getElementById('simTeamB').value.trim();
     const points = document.getElementById('simPoints').value;
-    const payload = Object.assign({ team_a, team_b }, opts);
+  // Always request breakdown unless explicitly disabled in opts
+  const payload = Object.assign({ team_a, team_b, breakdown: true }, opts);
     if (points) payload.points = parseInt(points, 10);
     const res = await api('/api/simulate', { method: 'POST', body: JSON.stringify(payload) });
     out(res);

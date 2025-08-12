@@ -129,7 +129,8 @@ def register_routes(app: Flask) -> None:
         quick = data.get("quick")
         accurate = data.get("accurate")
         points = data.get("points")
-        breakdown = data.get("breakdown", False)
+        # Web UI now defaults to requesting breakdown details; treat absence as True
+        breakdown = data.get("breakdown", True)
         seed = data.get("seed")
         used_defaults = False
         try:
@@ -193,6 +194,7 @@ def register_routes(app: Flask) -> None:
                     "team_b_win_rate": analysis.team_b_win_rate,
                     "team_a_wins": analysis.team_a_wins,
                     "team_b_wins": analysis.team_b_wins,
+                    "total_points": analysis.total_points,
                     "average_duration": analysis.average_duration,
                 },
                 "parameters": {
@@ -204,7 +206,19 @@ def register_routes(app: Flask) -> None:
             if used_defaults and note:
                 payload["note"] = note
             if breakdown:
-                payload["breakdown"] = analysis.to_dict().get("breakdown")
+                # The analysis.to_dict() currently stores detailed info under 'breakdown_data'.
+                # Build a consolidated breakdown payload expected by frontend rendering logic.
+                analysis_dict = analysis.to_dict()
+                detailed = analysis_dict.get('breakdown_data') or {}
+                payload["breakdown"] = {
+                    # core distributions
+                    "point_type_breakdown": analysis_dict.get('point_type_breakdown'),
+                    "point_type_percentages": analysis_dict.get('point_type_percentages'),
+                    # detailed sections
+                    **{k: v for k, v in detailed.items() if k in (
+                        'team_a_point_types','team_b_point_types','duration_by_type','serving_advantage'
+                    )}
+                }
             return jsonify(payload)
         except Exception as e:
             traceback.print_exc()

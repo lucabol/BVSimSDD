@@ -16,10 +16,8 @@ main { padding:14px 16px 32px; }
 #controls { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); align-items:start; }
 section.card { background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:0; box-shadow:0 1px 2px rgba(0,0,0,.04); position:relative; overflow:hidden; }
 section.card:hover { box-shadow:0 2px 6px rgba(0,0,0,.08); }
-section.card header.section-head { margin:0; padding:6px 10px 6px 12px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#0d47a1 0%,#1669c1 100%); color:#fff; cursor:pointer; }
-section.card header.section-head h2 { font-size:.85rem; font-weight:600; margin:0; letter-spacing:.5px; text-transform:uppercase; }
-section.card header.section-head button.toggle { background:rgba(255,255,255,.15); color:#fff; border:none; font-size:.65rem; padding:4px 8px; border-radius:20px; cursor:pointer; letter-spacing:.5px; }
-section.card header.section-head button.toggle:hover { background:rgba(255,255,255,.28); }
+section.card header.section-head { margin:0; padding:6px 10px 6px 12px; display:flex; align-items:center; justify-content:flex-start; background:linear-gradient(90deg,#0d47a1 0%,#1669c1 100%); color:#fff; }
+section.card header.section-head h2 { font-size:.75rem; font-weight:600; margin:0; letter-spacing:.5px; text-transform:uppercase; }
 section.card .section-body { padding:10px 12px 12px; display:grid; gap:6px; }
 section.card.collapsed .section-body { display:none; }
 
@@ -46,7 +44,7 @@ small { color:#607080; font-size:.6rem; }
 .examples-inline button { align-self:flex-start; }
 
 #layoutOutputs { margin-top:18px; display:grid; gap:18px; grid-template-columns:1fr; }
-@media (min-width:1000px) { #layoutOutputs { grid-template-columns:1fr 1fr; } }
+@media (min-width:1000px) { #layoutOutputs { grid-template-columns:2fr 1fr; } }
 
 /* OUTPUT / CHART PANES */
 #confidenceChartSection, #textOutputSection { background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
@@ -78,13 +76,13 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
 <body>
 <header>
   <h1>BVSim Web Interface</h1>
+  <button id="globalToggleControls" style="background:#ffffff22;border:1px solid #ffffff55;color:#fff;font-size:.65rem;padding:6px 10px;border-radius:20px;cursor:pointer;letter-spacing:.5px;" type="button" onclick="toggleAllControls()">Collapse Controls</button>
 </header>
 <main>
   <div id="controls">
     <section id="teams" class="card">
-      <header class="section-head" onclick="toggleSection(this.parentElement)">
+      <header class="section-head">
         <h2>Teams</h2>
-        <button class="toggle" type="button">▾</button>
       </header>
       <div class="section-body">
         <div class="flex-row">
@@ -117,9 +115,8 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
     </section>
 
     <section id="simulate" class="card">
-      <header class="section-head" onclick="toggleSection(this.parentElement)">
+      <header class="section-head">
         <h2>Simulate</h2>
-        <button class="toggle" type="button">▾</button>
       </header>
       <div class="section-body">
         <label>Team A</label>
@@ -141,9 +138,8 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
     </section>
 
     <section id="skills" class="card">
-      <header class="section-head" onclick="toggleSection(this.parentElement)">
+      <header class="section-head">
         <h2>Skills</h2>
-        <button class="toggle" type="button">▾</button>
       </header>
       <div class="section-body">
         <label>Team</label>
@@ -162,9 +158,8 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
     </section>
 
     <section id="compare" class="card">
-      <header class="section-head" onclick="toggleSection(this.parentElement)">
+      <header class="section-head">
         <h2>Compare</h2>
-        <button class="toggle" type="button">▾</button>
       </header>
       <div class="section-body">
         <label>Teams (comma separated)</label>
@@ -178,9 +173,8 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
     </section>
 
     <section id="examplesSection" class="card">
-      <header class="section-head" onclick="toggleSection(this.parentElement)">
+      <header class="section-head">
         <h2>Rallies</h2>
-        <button class="toggle" type="button">▾</button>
       </header>
       <div class="section-body">
         <div class="examples-inline">
@@ -204,8 +198,8 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
       <div id="matchImpactStatus" class="status"></div>
     </section>
     <section id="textOutputSection">
-      <h2 style="cursor:pointer" onclick="toggleOutput()">JSON Output <span id="outputToggle" style="font-size:.55rem;background:#1976d2;color:#fff;padding:2px 6px;border-radius:4px;">Show</span></h2>
-      <div id="output" class="collapsed" style="display:none"></div>
+      <h2>JSON Output</h2>
+      <div id="output"></div>
     </section>
   </div>
 </main>
@@ -215,10 +209,15 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/app.js"></script>
 <script>
-function toggleSection(sectionEl){
-  if(!sectionEl) return; sectionEl.classList.toggle('collapsed');
-  const btn = sectionEl.querySelector('header.section-head button.toggle');
-  if(btn) btn.textContent = sectionEl.classList.contains('collapsed') ? '▸' : '▾';
+let controlsCollapsed = false;
+function toggleAllControls(){
+  controlsCollapsed = !controlsCollapsed;
+  const cards = document.querySelectorAll('#controls section.card');
+  cards.forEach(card => {
+    if(controlsCollapsed) card.classList.add('collapsed'); else card.classList.remove('collapsed');
+  });
+  const btn = document.getElementById('globalToggleControls');
+  if(btn) btn.textContent = controlsCollapsed ? 'Expand Controls' : 'Collapse Controls';
 }
 </script>
 </body>

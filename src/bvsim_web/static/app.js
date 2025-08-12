@@ -34,18 +34,7 @@ function setSkillsStatus(msg, spinning=true){
   el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
 }
 
-function toggleOutput() {
-  const outEl = document.getElementById('output');
-  const tog = document.getElementById('outputToggle');
-  const isHidden = outEl.style.display === 'none';
-  if (isHidden) {
-    outEl.style.display = 'block';
-    tog.textContent = 'Hide';
-  } else {
-    outEl.style.display = 'none';
-    tog.textContent = 'Show';
-  }
-}
+// toggleOutput removed (output always visible now)
 function startWorking(msg = 'Working') {
   const el = document.getElementById('output');
   let dots = 0;

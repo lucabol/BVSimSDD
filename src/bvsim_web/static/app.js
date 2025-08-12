@@ -23,6 +23,11 @@ function clearMatchImpactDisplay() {
   if (legend) legend.innerHTML='';
   const table = document.getElementById('matchImpactTableContainer');
   if (table) table.innerHTML='';
+  // Hide rallies view (so other displays take full focus)
+  const rallies = document.getElementById('ralliesContainer');
+  if (rallies) { rallies.style.display='none'; rallies.innerHTML=''; }
+  const ralliesLegend = document.getElementById('ralliesLegend');
+  if (ralliesLegend) { ralliesLegend.style.display='none'; ralliesLegend.innerHTML=''; }
   if (matchImpactChart) { try { matchImpactChart.destroy(); } catch(_){} matchImpactChart=null; }
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
@@ -459,6 +464,11 @@ function parseRallySequence(seq) {
 function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
   const container = document.getElementById('ralliesContainer');
   if (!container) return;
+  // Hide chart-specific artifacts so rallies sit at top cleanly
+  const canvas = document.getElementById('matchImpactChart');
+  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width||canvas.clientWidth, canvas.height||canvas.clientHeight); }
+  const legendChart = document.getElementById('matchImpactLegend'); if (legendChart) legendChart.innerHTML='';
+  const table = document.getElementById('matchImpactTableContainer'); if (table) table.innerHTML='';
   container.innerHTML='';
   container.style.display = rallies.length ? 'block' : 'none';
   const legend = document.getElementById('ralliesLegend');
@@ -514,9 +524,5 @@ function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
   });
   // Update chart pane title to indicate we are viewing rallies
   const titleEl = document.getElementById('chartPaneTitle'); if (titleEl) titleEl.textContent='Rallies';
-  // Clear any existing chart visuals
-  clearMatchImpactDisplay();
-  // Re-attach container (clearMatchImpactDisplay clears legend/table but not our container since we appended after chart section markup). Reappend to ensure visibility.
-  const chartSection = document.getElementById('confidenceChartSection');
-  if (chartSection && !container.parentElement) chartSection.appendChild(container);
+  // No need to clearMatchImpactDisplay here; we explicitly cleared chart artifacts above.
 }

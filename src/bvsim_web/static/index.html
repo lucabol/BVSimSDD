@@ -43,8 +43,18 @@ small { color:#607080; font-size:.6rem; }
 .examples-inline > div { display:flex; flex-direction:column; min-width:100px; flex:1 1 120px; }
 .examples-inline button { align-self:flex-start; }
 
-#layoutOutputs { margin-top:18px; display:grid; gap:18px; grid-template-columns:1fr; }
-@media (min-width:1000px) { #layoutOutputs { grid-template-columns:2fr 1fr; } }
+#layoutOutputs { margin-top:18px; display:flex; flex-direction:column; gap:18px; }
+@media (min-width:900px) { 
+  #layoutOutputs { flex-direction:row; align-items:stretch; }
+  #confidenceChartSection { flex:2 1 0; }
+  #textOutputSection { flex:1 1 0; max-width:520px; }
+}
+/* Ensure sections stretch to same height when side by side */
+@media (min-width:900px) { 
+  #confidenceChartSection, #textOutputSection { display:flex; flex-direction:column; }
+  #confidenceChartSection > *, #textOutputSection > * { flex-shrink:0; }
+  #output { flex:1 1 auto; }
+}
 
 /* OUTPUT / CHART PANES */
 #confidenceChartSection, #textOutputSection { background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); }

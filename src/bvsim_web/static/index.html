@@ -7,36 +7,72 @@
 <link rel="alternate icon" type="image/png" href="/static/favicon.png" />
 <link rel="shortcut icon" href="/static/favicon.svg" />
 <style>
-body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-header { background:#0d47a1; color:#fff; padding:12px 20px; }
-main { padding:16px; display:flex; flex-wrap:wrap; gap:24px; }
-section { flex:1 1 400px; min-width:360px; background:#f5f7fa; padding:12px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
-h2 { margin-top:0; font-size:1.1rem; }
-label { display:block; margin-top:6px; font-size:.85rem; font-weight:600; }
-input, select, button, textarea { width:100%; margin-top:2px; padding:6px 8px; font-size:.9rem; }
-button { cursor:pointer; background:#1976d2; color:#fff; border:none; border-radius:4px; margin-top:8px; }
+body { font-family: system-ui, sans-serif; margin: 0; padding: 0; background:#fafbfc; }
+header { background:#0d47a1; color:#fff; padding:10px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+header h1 { font-size:1.15rem; margin:0; font-weight:600; letter-spacing:.5px; }
+main { padding:14px 16px 32px; }
+
+/* --- COMPACT CONTROLS GRID --- */
+#controls { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); align-items:start; }
+section.card { background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:0; box-shadow:0 1px 2px rgba(0,0,0,.04); position:relative; overflow:hidden; }
+section.card:hover { box-shadow:0 2px 6px rgba(0,0,0,.08); }
+section.card header.section-head { margin:0; padding:6px 10px 6px 12px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#0d47a1 0%,#1669c1 100%); color:#fff; cursor:pointer; }
+section.card header.section-head h2 { font-size:.85rem; font-weight:600; margin:0; letter-spacing:.5px; text-transform:uppercase; }
+section.card header.section-head button.toggle { background:rgba(255,255,255,.15); color:#fff; border:none; font-size:.65rem; padding:4px 8px; border-radius:20px; cursor:pointer; letter-spacing:.5px; }
+section.card header.section-head button.toggle:hover { background:rgba(255,255,255,.28); }
+section.card .section-body { padding:10px 12px 12px; display:grid; gap:6px; }
+section.card.collapsed .section-body { display:none; }
+
+label { display:block; font-size:.68rem; font-weight:600; color:#26435f; letter-spacing:.5px; }
+input, select, button, textarea { width:100%; padding:5px 7px; font-size:.72rem; border:1px solid #cfd8e3; border-radius:6px; background:#f8fafc; font-family:inherit; }
+input:focus, select:focus, textarea:focus { outline:2px solid #1976d2; background:#fff; }
+button { cursor:pointer; background:#1976d2; color:#fff; border:none; border-radius:6px; margin-top:2px; font-size:.7rem; font-weight:600; letter-spacing:.5px; padding:7px 8px; }
 button.secondary { background:#546e7a; }
-#output { white-space:pre-wrap; font-family:monospace; background:#111; color:#eee; padding:12px; border-radius:8px; max-height:400px; overflow:auto; }
+button.small-inline { width:auto; display:inline-block; margin-right:6px; }
+button:active { transform:translateY(1px); }
+
+ul.team-list { list-style:none; padding:0; margin:0; max-height:160px; overflow:auto; border:1px solid #e1e7ef; border-radius:6px; background:#fdfefe; }
+ul.team-list li { padding:4px 8px; font-size:.65rem; border-bottom:1px solid #edf1f5; display:flex; justify-content:space-between; }
+ul.team-list li:last-child { border-bottom:none; }
+small { color:#607080; font-size:.6rem; }
+
+.flex-row { display:flex; gap:6px; }
+.flex-row > * { flex:1; }
+.inline-group { display:flex; align-items:flex-end; gap:6px; flex-wrap:wrap; }
+.inline-group label { flex:0 0 70px; margin-top:2px; }
+.inline-group input { flex:1 1 80px; }
+.examples-inline { display:flex; gap:4px; flex-wrap:wrap; align-items:flex-end; }
+.examples-inline > div { display:flex; flex-direction:column; min-width:100px; flex:1 1 120px; }
+.examples-inline button { align-self:flex-start; }
+
+#layoutOutputs { margin-top:18px; display:grid; gap:18px; grid-template-columns:1fr; }
+@media (min-width:1000px) { #layoutOutputs { grid-template-columns:1fr 1fr; } }
+
+/* OUTPUT / CHART PANES */
+#confidenceChartSection, #textOutputSection { background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; padding:12px 14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+#confidenceChartSection h2, #textOutputSection h2 { margin:0 0 4px; font-size:.9rem; font-weight:600; color:#0d305f; display:flex; align-items:center; gap:8px; }
+#confidenceChartSection p { margin:0 0 6px; }
+#output { white-space:pre-wrap; font-family:ui-monospace, SFMono-Regular, Menlo, monospace; background:#0e1116; color:#d1d9e6; padding:10px 12px; border-radius:8px; max-height:420px; overflow:auto; font-size:.63rem; line-height:1.2; }
 #output.collapsed { display:none; }
-canvas#skillsChart { width:100%; }
-ul.team-list { list-style:none; padding:0; margin:0; }
-ul.team-list li { padding:4px 0; display:flex; justify-content:space-between; font-size:.85rem; border-bottom:1px solid #ddd; }
-small { color:#555; }
-.flex { display:flex; gap:8px; }
-.flex > div { flex:1; }
-.badge { background:#1976d2; color:#fff; padding:2px 6px; border-radius:4px; font-size:.7rem; }
-footer { margin-top:24px; padding:12px 20px; font-size:.75rem; color:#555; }
-table.match-impact { width:100%; border-collapse:collapse; margin-top:8px; font-size:.7rem; }
+
+canvas#matchImpactChart { width:100%; }
+footer { margin-top:28px; padding:16px 24px; font-size:.6rem; color:#5b6a7a; text-align:center; }
+
+table.match-impact { width:100%; border-collapse:collapse; margin-top:4px; font-size:.58rem; }
 table.match-impact thead { background:#0d47a1; color:#fff; }
-table.match-impact th, table.match-impact td { padding:4px 6px; text-align:left; border:1px solid #ccc; }
-table.match-impact tbody tr:nth-child(even) { background:#eef4f9; }
-table.match-impact tbody tr:hover { background:#e1edf7; }
+table.match-impact th, table.match-impact td { padding:3px 4px; text-align:left; border:1px solid #d2dbe5; }
+table.match-impact tbody tr:nth-child(even) { background:#f2f7fb; }
+table.match-impact tbody tr:hover { background:#e8f1f9; }
 table.match-impact .sig-pos { color:#0d652d; font-weight:600; }
 table.match-impact .sig-neg { color:#b71c1c; font-weight:600; }
-table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem; color:#555; }
-.status { font-size:.65rem; color:#555; margin-top:4px; min-height:14px; }
-.status .spinner { display:inline-block; width:10px; height:10px; border:2px solid #1976d2; border-top-color:transparent; border-radius:50%; animation:spin 0.7s linear infinite; margin-right:4px; }
+table.match-impact caption { caption-side:bottom; padding:4px; font-size:.5rem; color:#607080; }
+.status { font-size:.55rem; color:#4a5b6d; margin-top:2px; min-height:12px; }
+.status .spinner { display:inline-block; width:9px; height:9px; border:2px solid #1976d2; border-top-color:transparent; border-radius:50%; animation:spin .7s linear infinite; margin-right:3px; }
 @keyframes spin { to { transform:rotate(360deg); } }
+
+/* UTIL */
+.muted { color:#6c8297; font-size:.55rem; }
+.note { font-size:.55rem; color:#4a5b6d; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -44,98 +80,146 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem;
   <h1>BVSim Web Interface</h1>
 </header>
 <main>
-  <section id="teams">
-    <h2>Teams</h2>
-    <div class="flex">
-      <div>
-        <label>Create Team</label>
-        <input id="newTeamName" placeholder="Name" />
-        <select id="newTeamTemplate">
-          <option value="basic">Basic Template</option>
-          <option value="advanced">Advanced Template</option>
-        </select>
-        <button onclick="createTeam()">Create</button>
+  <div id="controls">
+    <section id="teams" class="card">
+      <header class="section-head" onclick="toggleSection(this.parentElement)">
+        <h2>Teams</h2>
+        <button class="toggle" type="button">▾</button>
+      </header>
+      <div class="section-body">
+        <div class="flex-row">
+          <div>
+            <label>Create Name</label>
+            <input id="newTeamName" placeholder="Name" />
+          </div>
+          <div>
+            <label>Template</label>
+            <select id="newTeamTemplate">
+              <option value="basic">Basic</option>
+              <option value="advanced">Advanced</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex-row">
+          <button onclick="createTeam()">Create</button>
+          <div style="display:flex; flex-direction:column; gap:4px;">
+            <label style="margin:0">Upload</label>
+            <input type="file" id="uploadTeamFile" accept=".yaml,.yml" style="padding:3px;" />
+          </div>
+          <button class="secondary" onclick="uploadTeam()">Upload</button>
+        </div>
+        <label style="margin-top:4px">Available Teams</label>
+        <ul class="team-list" id="teamList"></ul>
+        <div style="display:flex; gap:6px;">
+          <button class="secondary" onclick="refreshTeams()">Refresh</button>
+        </div>
       </div>
-      <div>
-        <label>Upload Team YAML</label>
-        <input type="file" id="uploadTeamFile" accept=".yaml,.yml" />
-        <button onclick="uploadTeam()">Upload</button>
+    </section>
+
+    <section id="simulate" class="card">
+      <header class="section-head" onclick="toggleSection(this.parentElement)">
+        <h2>Simulate</h2>
+        <button class="toggle" type="button">▾</button>
+      </header>
+      <div class="section-body">
+        <label>Team A</label>
+        <input id="simTeamA" placeholder="team_a.yaml or name" />
+        <label>Team B</label>
+        <input id="simTeamB" placeholder="team_b.yaml or name" />
+        <div class="flex-row">
+          <div>
+            <label>Points</label>
+            <input id="simPoints" type="number" placeholder="default" />
+          </div>
+        </div>
+        <div class="flex-row">
+          <button onclick="simulate()">Run</button>
+          <button onclick="simulateQuick()" class="secondary">Quick</button>
+          <button onclick="simulateAccurate()" class="secondary">Accurate</button>
+        </div>
       </div>
-    </div>
-    <h3>Available Teams</h3>
-    <ul class="team-list" id="teamList"></ul>
-    <button class="secondary" onclick="refreshTeams()">Refresh</button>
-  </section>
+    </section>
 
-  <section id="simulate">
-    <h2>Simulate</h2>
-    <label>Team A</label>
-    <input id="simTeamA" placeholder="team_a.yaml or name" />
-    <label>Team B</label>
-    <input id="simTeamB" placeholder="team_b.yaml or name" />
-    <label>Points (blank=default)</label>
-    <input id="simPoints" type="number" />
-    <div class="flex">
-      <button onclick="simulate()">Run Simulation</button>
-      <button onclick="simulateQuick()" class="secondary">Quick</button>
-      <button onclick="simulateAccurate()" class="secondary">Accurate</button>
-    </div>
-  </section>
+    <section id="skills" class="card">
+      <header class="section-head" onclick="toggleSection(this.parentElement)">
+        <h2>Skills</h2>
+        <button class="toggle" type="button">▾</button>
+      </header>
+      <div class="section-body">
+        <label>Team</label>
+        <input id="skillsTeam" placeholder="team_a.yaml or name" />
+        <label>Opponent</label>
+        <input id="skillsOpponent" placeholder="team_b.yaml or name" />
+        <label>Improve (e.g. 5% or 0.05)</label>
+        <input id="skillsImprove" placeholder="5%" />
+        <div class="flex-row">
+          <button onclick="skillsAnalysis()">Analyze</button>
+          <button onclick="skillsQuick()" class="secondary">Quick</button>
+          <button onclick="skillsAccurate()" class="secondary">Accurate</button>
+        </div>
+        <div id="skillsStatus" class="status"></div>
+      </div>
+    </section>
 
-  <section id="skills">
-    <h2>Skills Analysis</h2>
-    <label>Team</label>
-    <input id="skillsTeam" placeholder="team_a.yaml or name" />
-    <label>Opponent (optional)</label>
-    <input id="skillsOpponent" placeholder="team_b.yaml or name" />
-    <label>Improve (e.g. 5% or 0.05)</label>
-    <input id="skillsImprove" placeholder="5%" />
-    <div class="flex">
-      <button onclick="skillsAnalysis()">Analyze</button>
-      <button onclick="skillsQuick()" class="secondary">Quick</button>
-      <button onclick="skillsAccurate()" class="secondary">Accurate</button>
-    </div>
-  <div id="skillsStatus" class="status"></div>
-  </section>
+    <section id="compare" class="card">
+      <header class="section-head" onclick="toggleSection(this.parentElement)">
+        <h2>Compare</h2>
+        <button class="toggle" type="button">▾</button>
+      </header>
+      <div class="section-body">
+        <label>Teams (comma separated)</label>
+        <input id="compareTeams" placeholder="team_a.yaml,team_b.yaml" />
+        <div class="flex-row">
+          <button onclick="compareTeamsRun()">Compare</button>
+          <button onclick="compareQuick()" class="secondary">Quick</button>
+          <button onclick="compareAccurate()" class="secondary">Accurate</button>
+        </div>
+      </div>
+    </section>
 
-  <section id="compare">
-    <h2>Compare Teams</h2>
-    <label>Teams (comma separated)</label>
-    <input id="compareTeams" placeholder="team_a.yaml,team_b.yaml" />
-    <div class="flex">
-      <button onclick="compareTeamsRun()">Compare</button>
-      <button onclick="compareQuick()" class="secondary">Quick</button>
-      <button onclick="compareAccurate()" class="secondary">Accurate</button>
-    </div>
-  </section>
+    <section id="examplesSection" class="card">
+      <header class="section-head" onclick="toggleSection(this.parentElement)">
+        <h2>Rallies</h2>
+        <button class="toggle" type="button">▾</button>
+      </header>
+      <div class="section-body">
+        <div class="examples-inline">
+          <div><label>Team A</label><input id="exTeamA" /></div>
+          <div><label>Team B</label><input id="exTeamB" /></div>
+          <div><label>Count</label><input id="exCount" type="number" value="5" /></div>
+          <div style="display:flex;align-items:flex-end"><button onclick="runExamples()">Generate</button></div>
+        </div>
+        <div class="note">Generates short rally descriptions for quick inspection.</div>
+      </div>
+    </section>
+  </div>
 
-  <section id="examplesSection">
-    <h2>Rally Examples</h2>
-    <label>Team A</label><input id="exTeamA" />
-    <label>Team B</label><input id="exTeamB" />
-    <label>Count</label><input id="exCount" type="number" value="5" />
-  <button onclick="runExamples()">Generate</button>
-  </section>
-
-  <!-- Visualization section removed as per requirement -->
-  <section style="flex:1 1 100%" id="confidenceChartSection">
-  <h2 id="chartPaneTitle">Output</h2>
-  <p style="font-size:.75rem;color:#555;margin-top:-6px">This pane now visualizes: (a) Skills Analysis parameter impact (CI scatter), (b) Simulation win rates (bar), and (c) Team Comparison rankings & matrix (bar + table).</p>
-    <canvas id="matchImpactChart" height="250" style="max-height:600px;width:100%;"></canvas>
-  <div id="matchImpactLegend" style="display:flex;flex-wrap:wrap;margin-top:4px"></div>
-  <div id="matchImpactTableContainer"></div>
-  <div id="matchImpactStatus" class="status"></div>
-  </section>
-
-  <section style="flex:1 1 100%">
-    <h2 style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleOutput()">Output <span id="outputToggle" style="font-size:.7rem;background:#1976d2;color:#fff;padding:2px 6px;border-radius:4px;">Show</span></h2>
-    <div id="output" class="collapsed" style="display:none"></div>
-  </section>
+  <div id="layoutOutputs">
+    <section id="confidenceChartSection">
+      <h2 id="chartPaneTitle">Output</h2>
+      <p class="muted">Visualizes skills impact (CI), simulation win rates, or comparison rankings.</p>
+      <canvas id="matchImpactChart" height="260" style="max-height:640px;width:100%;"></canvas>
+      <div id="matchImpactLegend" style="display:flex;flex-wrap:wrap;margin-top:4px"></div>
+      <div id="matchImpactTableContainer"></div>
+      <div id="matchImpactStatus" class="status"></div>
+    </section>
+    <section id="textOutputSection">
+      <h2 style="cursor:pointer" onclick="toggleOutput()">JSON Output <span id="outputToggle" style="font-size:.55rem;background:#1976d2;color:#fff;padding:2px 6px;border-radius:4px;">Show</span></h2>
+      <div id="output" class="collapsed" style="display:none"></div>
+    </section>
+  </div>
 </main>
 <footer>
   BVSim Web MVP - Generated interface. Edit YAML files directly to fine-tune probabilities.
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/app.js"></script>
+<script>
+function toggleSection(sectionEl){
+  if(!sectionEl) return; sectionEl.classList.toggle('collapsed');
+  const btn = sectionEl.querySelector('header.section-head button.toggle');
+  if(btn) btn.textContent = sectionEl.classList.contains('collapsed') ? '▸' : '▾';
+}
+</script>
 </body>
 </html>

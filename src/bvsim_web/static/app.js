@@ -1,5 +1,7 @@
 let spinnerTimer = null;
 let matchImpactChart = null;
+let simulateChart = null; // bar chart for last simulation
+let compareChart = null;  // bar chart for last comparison average win rates
 let lastSkillsData = null; // reserved for future use (e.g., re-sorting)
 // Removed legacy skillsChart variable
 
@@ -22,6 +24,8 @@ function clearMatchImpactDisplay() {
   const table = document.getElementById('matchImpactTableContainer');
   if (table) table.innerHTML='';
   if (matchImpactChart) { try { matchImpactChart.destroy(); } catch(_){} matchImpactChart=null; }
+  if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
+  if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
 }
 function setSkillsStatus(msg, spinning=true){
   const el = document.getElementById('skillsStatus');
@@ -173,6 +177,90 @@ function renderMatchImpactChart(stat) {
     }
   } catch(e) { console.warn('renderMatchImpactChart failed', e); }
 }
+
+// Bar chart for a single simulation win rates (Team A vs Team B)
+function renderSimulationChart(sim) {
+  if (!sim || !sim.summary) return;
+  const canvas = document.getElementById('matchImpactChart');
+  if (!canvas) return;
+  // Destroy only non-skills charts if present
+  if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
+  if (matchImpactChart) { /* keep skills scatter if user wants? We clear before each new source anyway */ }
+  if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
+  const { team_a, team_b, team_a_win_rate, team_b_win_rate } = sim.summary;
+  const data = {
+    labels: [team_a, team_b],
+    datasets: [{ label: 'Win Rate %', data: [team_a_win_rate, team_b_win_rate], backgroundColor: ['#1976d2','#c62828'] }]
+  };
+  simulateChart = new Chart(canvas.getContext('2d'), {
+    type: 'bar', data,
+    options: { responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ title:{display:true,text:'Simulation Win Rates'}, legend:{display:false}, tooltip:{ callbacks:{ label: ctx=> `${ctx.parsed.y.toFixed(2)}%` } } },
+      scales:{ y:{ beginAtZero:true, title:{display:true,text:'Win %'} } }
+    }
+  });
+  setMatchImpactStatus('', false);
+  const legendEl = document.getElementById('matchImpactLegend');
+  if (legendEl) {
+    legendEl.innerHTML = '';
+    const note = document.createElement('div');
+    note.style.fontSize = '0.65rem';
+    note.textContent = `Simulation: ${sim.parameters.points} points`;
+    legendEl.appendChild(note);
+  }
+  const tableContainer = document.getElementById('matchImpactTableContainer');
+  if (tableContainer) {
+    tableContainer.innerHTML = `<table class="match-impact"><thead><tr><th>Team</th><th>Win %</th><th>Wins</th></tr></thead><tbody><tr><td>${team_a}</td><td>${team_a_win_rate.toFixed(2)}%</td><td>${sim.summary.team_a_wins}</td></tr><tr><td>${team_b}</td><td>${team_b_win_rate.toFixed(2)}%</td><td>${sim.summary.team_b_wins}</td></tr></tbody><caption>Single simulation results.</caption></table>`;
+  }
+}
+
+// Bar chart for comparison rankings plus matrix table
+function renderComparisonChart(comp) {
+  if (!comp || !comp.results) return;
+  const canvas = document.getElementById('matchImpactChart');
+  if (!canvas) return;
+  if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
+  if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
+  const rankings = comp.results.rankings || [];
+  const labels = rankings.map(r=> r.name);
+  const dataVals = rankings.map(r=> r.average_win_rate);
+  compareChart = new Chart(canvas.getContext('2d'), {
+    type:'bar',
+    data:{ labels, datasets:[{ label:'Avg Win %', data:dataVals, backgroundColor:'#6a1b9a' }]},
+    options:{ responsive:true, maintainAspectRatio:false, animation:false,
+      plugins:{ title:{display:true,text:'Comparison Average Win Rates'}, legend:{display:false}, tooltip:{ callbacks:{ label: ctx=> `${ctx.parsed.y.toFixed(2)}%` } } },
+      scales:{ y:{ beginAtZero:true, title:{display:true,text:'Avg Win %'} } }
+    }
+  });
+  setMatchImpactStatus('', false);
+  // Legend note
+  const legendEl = document.getElementById('matchImpactLegend');
+  if (legendEl) {
+    legendEl.innerHTML='';
+    const note=document.createElement('div'); note.style.fontSize='0.65rem'; note.textContent=`Comparison: ${comp.parameters.points} points per matchup`;
+    legendEl.appendChild(note);
+  }
+  // Build matrix table
+  const tableContainer = document.getElementById('matchImpactTableContainer');
+  if (tableContainer) {
+    const teams = comp.results.teams || [];
+    const matrix = comp.results.results_matrix || {};
+    // header
+    let html = '<table class="match-impact"><thead><tr><th>Team</th>' + teams.map(t=>`<th>${t}</th>`).join('') + '</tr></thead><tbody>';
+    teams.forEach(a=> {
+      html += `<tr><td>${a}</td>`;
+      teams.forEach(b=> {
+        if (a===b) html += '<td>-</td>'; else {
+          const val = matrix[a] && matrix[a][b] !== undefined ? matrix[a][b].toFixed(1)+'%' : '';
+          html += `<td>${val}</td>`;
+        }
+      });
+      html += '</tr>';
+    });
+    html += '</tbody><caption>Win rate matrix (row vs column). Rankings ordered by average win %.</caption></table>';
+    tableContainer.innerHTML = html;
+  }
+}
 async function api(path, options={}) {
   startWorking();
   const res = await fetch(path, Object.assign({headers: { 'Content-Type': 'application/json' }}, options));
@@ -235,6 +323,8 @@ async function simulateCommon(opts) {
     if (points) payload.points = parseInt(points, 10);
     const res = await api('/api/simulate', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
+  clearMatchImpactDisplay();
+  renderSimulationChart(res);
   } catch (e) { out(e.message); }
 }
 function simulate() { simulateCommon({}); }
@@ -293,6 +383,8 @@ async function compareCommon(opts) {
     const payload = Object.assign({ teams }, opts);
     const res = await api('/api/compare', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
+  clearMatchImpactDisplay();
+  renderComparisonChart(res);
   } catch (e) { out(e.message); }
 }
 function compareTeamsRun() { compareCommon({}); }

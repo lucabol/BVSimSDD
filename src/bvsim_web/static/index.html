@@ -23,6 +23,14 @@ small { color:#555; }
 .flex > div { flex:1; }
 .badge { background:#1976d2; color:#fff; padding:2px 6px; border-radius:4px; font-size:.7rem; }
 footer { margin-top:24px; padding:12px 20px; font-size:.75rem; color:#555; }
+table.match-impact { width:100%; border-collapse:collapse; margin-top:8px; font-size:.7rem; }
+table.match-impact thead { background:#0d47a1; color:#fff; }
+table.match-impact th, table.match-impact td { padding:4px 6px; text-align:left; border:1px solid #ccc; }
+table.match-impact tbody tr:nth-child(even) { background:#eef4f9; }
+table.match-impact tbody tr:hover { background:#e1edf7; }
+table.match-impact .sig-pos { color:#0d652d; font-weight:600; }
+table.match-impact .sig-neg { color:#b71c1c; font-weight:600; }
+table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem; color:#555; }
 </style>
 </head>
 <body>
@@ -108,6 +116,7 @@ footer { margin-top:24px; padding:12px 20px; font-size:.75rem; color:#555; }
     <p style="font-size:.75rem;color:#555;margin-top:-6px">Run a multi-run skills analysis (skills endpoint with runs>1) to visualize match win rate Δ with 95% CI.</p>
     <canvas id="matchImpactChart" height="160" style="max-height:340px"></canvas>
   <div id="matchImpactLegend" style="display:flex;flex-wrap:wrap;margin-top:4px"></div>
+  <div id="matchImpactTableContainer"></div>
   </section>
 
   <section style="flex:1 1 100%">

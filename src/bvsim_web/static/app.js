@@ -55,9 +55,11 @@ function renderMatchImpactChart(stat) {
     const uppers = topSkills.map(s=> s.match.upper);
     const significant = topSkills.map(s=> !!s.significant);
 
-    // Dynamic height per skill
-  const BASE_ROW_HEIGHT = 36; const MIN_HEIGHT = 320; // increased spacing for readability
-    const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 40);
+  // Dynamic height per skill
+  // Increased base row height & minimum height to create more vertical space between lines.
+  // (Was BASE_ROW_HEIGHT=36, MIN_HEIGHT=320)
+  const BASE_ROW_HEIGHT = 46; const MIN_HEIGHT = 420; // tweak as needed for readability
+  const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 60);
     canvas.style.height = desiredHeight + 'px';
 
     // Destroy prior chart
@@ -86,7 +88,7 @@ function renderMatchImpactChart(stat) {
         plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=> items[0].raw && items[0].raw.y, label:(ctx)=>{ const i=ctx.dataIndex; const mean=means[i]; const lo=lowers[i]; const hi=uppers[i]; const sig=significant[i]?' (significant)':''; return `${mean>=0?'+':''}${mean.toFixed(2)}%  CI [${lo>=0?'+':''}${lo.toFixed(2)}%, ${hi>=0?'+':''}${hi.toFixed(2)}%]${sig}`; } } }, title:{display:true,text:'Match Win Rate Impact (mean & 95% CI)'} },
         scales:{
           x:{ title:{display:true,text:'Δ Win Rate %'}, min:xMin, max:xMax, ticks:{ callback:v=> (v>0?'+':'')+v+'%' } },
-          y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:6, autoSkip:false, font:{ size:12 } } }
+          y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:10, autoSkip:false, font:{ size:12 } } }
         }
       }, plugins:[errorBarPlugin]
     });
@@ -107,6 +109,35 @@ function renderMatchImpactChart(stat) {
         const swatch=document.createElement('span'); swatch.style.width='14px'; swatch.style.height='14px'; swatch.style.borderRadius='50%'; swatch.style.background=e.color; swatch.style.border='1px solid #133';
         item.appendChild(swatch); const txt=document.createElement('span'); txt.textContent=e.label; item.appendChild(txt); legendEl.appendChild(item);
       });
+    }
+
+    // Build detailed table with match and (if available) point CIs
+    const tableContainer = document.getElementById('matchImpactTableContainer');
+    if (tableContainer) {
+      const hasPoint = topSkills.some(s=> s.point_mean !== undefined || (s.point && s.point.mean !== undefined) || s.point_mean !== undefined);
+      const rows = topSkills.map(s=>{
+        const m = s.match || {}; // expected {mean,lower,upper}
+        // Try to derive point stats if present (various naming possibilities)
+        const pMean = s.point_mean ?? (s.point && s.point.mean);
+        const pLower = s.point_lower ?? (s.point && s.point.lower);
+        const pUpper = s.point_upper ?? (s.point && s.point.upper);
+        const sig = s.significant ? (m.mean>=0?'pos':'neg') : '';
+        const cls = s.significant ? (m.mean>=0?'sig-pos':'sig-neg') : '';
+        return `<tr class="${cls}">`+
+          `<td>${s.parameter}</td>`+
+          (hasPoint? `<td>${pMean!==undefined? (pMean>=0?'+':'')+pMean.toFixed(2)+'%':''}</td>`: '')+
+          (hasPoint? `<td>${pLower!==undefined? (pLower>=0?'+':'')+pLower.toFixed(2)+'%':''}</td>`: '')+
+          (hasPoint? `<td>${pUpper!==undefined? (pUpper>=0?'+':'')+pUpper.toFixed(2)+'%':''}</td>`: '')+
+          `<td>${m.mean!==undefined? (m.mean>=0?'+':'')+m.mean.toFixed(2)+'%':''}</td>`+
+          `<td>${m.lower!==undefined? (m.lower>=0?'+':'')+m.lower.toFixed(2)+'%':''}</td>`+
+          `<td>${m.upper!==undefined? (m.upper>=0?'+':'')+m.upper.toFixed(2)+'%':''}</td>`+
+          `<td>${s.significant? (sig==='pos'?'Yes (+)':'Yes (-)'):'No'}</td>`+
+        `</tr>`; }).join('');
+      const headerPoint = hasPoint ? `<th colspan="3">Point Impact 95% CI</th>` : '';
+      const subHeaderPoint = hasPoint ? `<tr><th>Parameter</th><th>Mean</th><th>Lower</th><th>Upper</th><th>Match Mean</th><th>Match Lower</th><th>Match Upper</th><th>Significant?</th></tr>` : '';
+      // Simpler single header row to keep size small
+      const header = `<tr><th>Parameter</th>${hasPoint?'<th>Point Mean</th><th>Point Low</th><th>Point High</th>':''}<th>Match Mean</th><th>Match Low</th><th>Match High</th><th>Significant</th></tr>`;
+      tableContainer.innerHTML = `<table class="match-impact"><thead>${header}</thead><tbody>${rows}</tbody><caption>Top ${topSkills.length} parameters by match impact. Values show percentage point change (Δ) in win probability. Confidence intervals at 95% level.</caption></table>`;
     }
   } catch(e) { console.warn('renderMatchImpactChart failed', e); }
 }
@@ -201,7 +232,11 @@ async function skillsCommon(opts) {
     const lower = hasMatch ? (v.match_lower ?? mean) : (v.improvement_lower !== undefined ? v.improvement_lower : mean);
     const upper = hasMatch ? (v.match_upper ?? mean) : (v.improvement_upper !== undefined ? v.improvement_upper : mean);
         const significant = lower > 0 || upper < 0; // CI excludes zero
-        return { parameter, match: { mean, lower, upper }, significant };
+  // Point impact (raw win-rate improvement) values
+  const pMean = v.improvement !== undefined ? v.improvement : undefined;
+  const pLower = v.improvement_lower !== undefined ? v.improvement_lower : pMean;
+  const pUpper = v.improvement_upper !== undefined ? v.improvement_upper : pMean;
+  return { parameter, point: { mean: pMean, lower: pLower, upper: pUpper }, match: { mean, lower, upper }, significant };
       });
       // Only attempt to render if we have at least one improvement
       if (skills.length) {

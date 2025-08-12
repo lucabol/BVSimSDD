@@ -5,6 +5,13 @@ let compareChart = null;  // bar chart for last comparison average win rates
 let lastSkillsData = null; // reserved for future use (e.g., re-sorting)
 // Removed legacy skillsChart variable
 
+// Formatting helpers for dynamic titles
+function fmtInt(n){ if(n==null) return ''; if(n>=1_000_000) return (n/1_000_000).toFixed(n%1_000_000?1:0)+'M'; if(n>=1000) return (n/1000).toFixed(n%1000?1:0)+'k'; return ''+n; }
+function fmtPct(p){ if(p==null || isNaN(p)) return ''; return (p>=0?'+':'')+p.toFixed(2)+'%'; }
+function fmtChangeVal(v){ if(v==null) return ''; // value as fraction; show also percent
+  if(Math.abs(v) <= 1){ return (v*100).toFixed(1)+'%'; }
+  return v.toString(); }
+
 // --- Status / progress helpers ---
 function setMatchImpactStatus(msg, spinning=true) {
   const el = document.getElementById('matchImpactStatus');
@@ -73,8 +80,7 @@ function renderMatchImpactChart(stat) {
     if (!stat || !stat.statistical_analysis) return;
     const canvas = document.getElementById('matchImpactChart');
     if (!canvas) return;
-  const titleEl = document.getElementById('chartPaneTitle');
-  if (titleEl) titleEl.textContent = 'Skills Impact (Match Win Rate Δ)';
+  // Title intentionally set by caller (skills analysis) to include dynamic parameters
 
   // Sort & select top skills by descending mean impact (most positive first)
   const skills = (stat.skills || []).slice().sort((a,b)=> b.match.mean - a.match.mean);
@@ -177,11 +183,16 @@ function renderMatchImpactChart(stat) {
 
 // Bar chart for a single simulation win rates (Team A vs Team B)
 function renderSimulationChart(sim) {
+  // Add dynamic title content
+  const paneTitle = document.getElementById('chartPaneTitle');
+  if (paneTitle && sim && sim.summary) {
+    const s = sim.summary; const pts = sim.parameters?.points; 
+    paneTitle.textContent = `Simulation: ${s.team_a} ${s.team_a_win_rate.toFixed(1)}% vs ${s.team_b} ${s.team_b_win_rate.toFixed(1)}% (${fmtInt(pts)} pts)`;
+  }
   if (!sim || !sim.summary) return;
   const canvas = document.getElementById('matchImpactChart');
   if (!canvas) return;
-  const titleEl = document.getElementById('chartPaneTitle');
-  if (titleEl) titleEl.textContent = 'Simulation Win Rates';
+  // Chart.js internal title kept concise; pane title above holds detailed context
   // Destroy only non-skills charts if present
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   if (matchImpactChart) { /* keep skills scatter if user wants? We clear before each new source anyway */ }
@@ -215,11 +226,16 @@ function renderSimulationChart(sim) {
 
 // Bar chart for comparison rankings plus matrix table
 function renderComparisonChart(comp) {
+  // Add dynamic pane title
+  const paneTitle = document.getElementById('chartPaneTitle');
+  if (paneTitle && comp && comp.results) {
+    const pts = comp.parameters?.points; const teamCount = (comp.results.rankings||[]).length; 
+    paneTitle.textContent = `Comparison (${teamCount} teams, ${fmtInt(pts)} pts/matchup)`;
+  }
   if (!comp || !comp.results) return;
   const canvas = document.getElementById('matchImpactChart');
   if (!canvas) return;
-  const titleEl = document.getElementById('chartPaneTitle');
-  if (titleEl) titleEl.textContent = 'Team Comparison Rankings';
+  // Keep internal chart title short; pane title has full context
   if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   const rankings = comp.results.rankings || [];
@@ -373,24 +389,31 @@ async function skillsCommon(opts) {
     // Backend currently returns single-run improvements without statistical_analysis / CI.
     // Synthesize a structure compatible with renderMatchImpactChart using improvement deltas.
   if (res && res.results && res.results.parameter_improvements) {
+      lastSkillsData = res; // store
+      // Dynamic pane title with baseline & change
+      const paneTitle = document.getElementById('chartPaneTitle');
+      if (paneTitle) {
+        const base = res.results.baseline_win_rate; const changeVal = res.results.change_value; const pts = res.parameters?.points || res.results.points_per_test; const tTeam = res.teams?.team || 'Team A'; const tOpp = res.teams?.opponent || 'Team B';
+        paneTitle.textContent = `Skills Impact: ${tTeam} vs ${tOpp} (baseline ${base?.toFixed?base.toFixed(1):base}%, Δ each ${fmtChangeVal(changeVal)}, ${fmtInt(pts)} pts/test)`;
+      }
+      // Build skills array for generic renderer
       const improvs = res.results.parameter_improvements;
       const skills = Object.entries(improvs).map(([parameter, v]) => {
-    // Prefer match-level improvement if available
-    const hasMatch = v.match_improvement !== undefined;
-    const mean = hasMatch ? v.match_improvement : (v.improvement || 0);
-    const lower = hasMatch ? (v.match_lower ?? mean) : (v.improvement_lower !== undefined ? v.improvement_lower : mean);
-    const upper = hasMatch ? (v.match_upper ?? mean) : (v.improvement_upper !== undefined ? v.improvement_upper : mean);
-        const significant = lower > 0 || upper < 0; // CI excludes zero
-  // Point impact (raw win-rate improvement) values
-  const pMean = v.improvement !== undefined ? v.improvement : undefined;
-  const pLower = v.improvement_lower !== undefined ? v.improvement_lower : pMean;
-  const pUpper = v.improvement_upper !== undefined ? v.improvement_upper : pMean;
-  return { parameter, point: { mean: pMean, lower: pLower, upper: pUpper }, match: { mean, lower, upper }, significant };
+        const mean = v.match_improvement !== undefined ? v.match_improvement : (v.improvement || 0);
+        const lower = v.match_lower ?? v.improvement_lower ?? mean;
+        const upper = v.match_upper ?? v.improvement_upper ?? mean;
+        const significant = lower > 0 || upper < 0;
+        const pMean = v.improvement !== undefined ? v.improvement : undefined;
+        const pLower = v.improvement_lower !== undefined ? v.improvement_lower : pMean;
+        const pUpper = v.improvement_upper !== undefined ? v.improvement_upper : pMean;
+        return { parameter, point: { mean: pMean, lower: pLower, upper: pUpper }, match: { mean, lower, upper }, significant };
       });
-      // Only attempt to render if we have at least one improvement
       if (skills.length) {
         renderMatchImpactChart({ statistical_analysis: true, skills });
+        // After rendering restore dynamic pane title (renderMatchImpactChart doesn't override now)
       }
+      // Legend supplementary note
+      setTimeout(()=>{ const legendEl=document.getElementById('matchImpactLegend'); if(legendEl){ const base = res.results.baseline_win_rate; const changeVal = res.results.change_value; const pts = res.parameters?.points || res.results.points_per_test; const note=document.createElement('div'); note.style.fontSize='.6rem'; note.textContent=`Baseline win rate ${base?.toFixed?base.toFixed(2):base}%. Each parameter increased by ${fmtChangeVal(changeVal)} (additive). ${fmtInt(pts)} pts per test.`; legendEl.appendChild(note);} }, 60);
     } else if (res && res.statistical_analysis) {
       // Future multi-run pathway
       renderMatchImpactChart(res);

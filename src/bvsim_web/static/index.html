@@ -102,11 +102,11 @@ footer { margin-top:24px; padding:12px 20px; font-size:.75rem; color:#555; }
   <button onclick="runExamples()">Generate</button>
   </section>
 
-  <section style="flex:1 1 100%" id="visualizationSection">
-    <h2>Skills Impact Visualization</h2>
-    <p style="font-size:.8rem;margin-top:-4px;color:#555">Run a Skills Analysis to populate the chart. Shows baseline and projected win rate after improving each parameter.</p>
-    <canvas id="skillsChart" height="140" style="max-height:320px"></canvas>
-    <div id="chartHint" style="font-size:.7rem;color:#777;margin-top:4px;">Top 25 parameters by improvement shown. Hover for details.</div>
+  <!-- Visualization section removed as per requirement -->
+  <section style="flex:1 1 100%" id="confidenceChartSection">
+    <h2>Match Impact Confidence Chart</h2>
+    <p style="font-size:.75rem;color:#555;margin-top:-6px">Run a multi-run skills analysis (skills endpoint with runs>1) to visualize match win rate Δ with 95% CI.</p>
+    <canvas id="matchImpactChart" height="160" style="max-height:340px"></canvas>
   </section>
 
   <section style="flex:1 1 100%">

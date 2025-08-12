@@ -1,6 +1,7 @@
 let spinnerTimer = null;
-let skillsChart = null;
-let lastSkillsData = null;
+let matchImpactChart = null;
+let lastSkillsData = null; // reserved for future use (e.g., re-sorting)
+// Removed legacy skillsChart variable
 
 function toggleOutput() {
   const outEl = document.getElementById('output');
@@ -37,104 +38,59 @@ function out(obj) {
   el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
 }
 
-function renderSkillsChart(results) {
+// Statistical match impact chart (horizontal CI lines)
+function renderMatchImpactChart(stat) {
   try {
-    const ctx = document.getElementById('skillsChart');
-    if (!ctx || !results) return;
-    const baseline = results.baseline_win_rate; // percent value
-    const improvements = results.parameter_improvements || {};
-    const rows = Object.entries(improvements).map(([name, info]) => ({
-      name,
-      win_rate: info.win_rate, // already absolute win rate percent
-      improvement: info.improvement // delta in percent points
-    }));
-    // Sort by absolute improvement desc
-    rows.sort((a,b) => Math.abs(b.improvement) - Math.abs(a.improvement));
-    const top = rows.slice(0, 25);
-    const labels = top.map(r => r.name.split('.').slice(-2).join('.'));
-    const dataWin = top.map(r => r.win_rate);
-    const dataImprovement = top.map(r => r.improvement);
-    const baseLineData = new Array(top.length).fill(baseline);
-    if (skillsChart) {
-      skillsChart.destroy();
-    }
-    skillsChart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [
-          {
-            type: 'line',
-            label: 'Baseline',
-            data: baseLineData,
-            borderColor: '#888',
-            borderWidth: 1,
-            pointRadius: 0,
-            fill: false,
-            tension: 0
-          },
-            {
-            label: 'New Win Rate',
-            data: dataWin,
-            backgroundColor: dataImprovement.map(v => v >= 0 ? 'rgba(25,118,210,0.55)' : 'rgba(198,40,40,0.55)'),
-            borderColor: dataImprovement.map(v => v >= 0 ? 'rgba(25,118,210,1)' : 'rgba(198,40,40,1)'),
-            borderWidth: 1
-          },
-          {
-            label: 'Improvement (Δ)',
-            data: dataImprovement,
-            type: 'line',
-            yAxisID: 'y1',
-            borderColor: '#43a047',
-            backgroundColor: 'rgba(67,160,71,0.3)',
-            fill: true,
-            tension: 0.25
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          tooltip: {
-            callbacks: {
-              label: (ctx) => {
-                if (ctx.dataset.label === 'New Win Rate') {
-                  const imp = dataImprovement[ctx.dataIndex];
-                  return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}% (Δ ${imp >= 0 ? '+' : ''}${imp.toFixed(3)} pts)`;
-                }
-                if (ctx.dataset.label === 'Baseline') {
-                  return `Baseline: ${baseline.toFixed(2)}%`;
-                }
-                if (ctx.dataset.label.startsWith('Improvement')) {
-                  return `Δ: ${ctx.parsed.y.toFixed(3)} pts`;
-                }
-                return `${ctx.dataset.label}: ${ctx.parsed.y}`;
-              }
-            }
-          },
-          legend: { display: true }
-        },
-        scales: {
-          y: {
-            title: { display: true, text: 'Win Rate %' },
-            beginAtZero: false,
-            suggestedMin: Math.max(0, baseline - 5),
-            suggestedMax: Math.min(100, baseline + 5)
-          },
-          y1: {
-            position: 'right',
-            grid: { drawOnChartArea: false },
-            title: { display: true, text: 'Improvement Δ pts' }
-          },
-          x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
+    if (!stat || !stat.statistical_analysis) return;
+    const canvas = document.getElementById('matchImpactChart');
+    if (!canvas) return;
+
+  // Sort & select top skills by descending mean impact (most positive first)
+  const skills = (stat.skills || []).slice().sort((a,b)=> b.match.mean - a.match.mean);
+    const TOP_N = 30;
+    const topSkills = skills.slice(0, TOP_N);
+    const labels = topSkills.map(s=> s.parameter);
+    const means = topSkills.map(s=> s.match.mean);
+    const lowers = topSkills.map(s=> s.match.lower);
+    const uppers = topSkills.map(s=> s.match.upper);
+    const significant = topSkills.map(s=> !!s.significant);
+
+    // Dynamic height per skill
+    const BASE_ROW_HEIGHT = 26; const MIN_HEIGHT = 260;
+    const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 40);
+    canvas.style.height = desiredHeight + 'px';
+
+    // Destroy prior chart
+    if (matchImpactChart) { try { matchImpactChart.destroy(); } catch(_) {} matchImpactChart = null; }
+
+    // X range from CI bounds including zero
+    const minCI = Math.min(...lowers); const maxCI = Math.max(...uppers);
+    const span = maxCI - minCI || 1; const pad = span * 0.05;
+    let xMin = minCI - pad; let xMax = maxCI + pad;
+    if (xMin > 0) xMin = 0; if (xMax < 0) xMax = 0;
+
+    const errorBarPlugin = { id:'errorBars', afterDatasetsDraw(chart){
+      const {ctx} = chart; const meta = chart.getDatasetMeta(0); const xScale = chart.scales.x;
+      ctx.save(); ctx.lineWidth = 1.2;
+      for (let i=0;i<meta.data.length;i++){ const pt = meta.data[i]; if(!pt) continue; const y = pt.y;
+        const xL = xScale.getPixelForValue(lowers[i]); const xH = xScale.getPixelForValue(uppers[i]);
+        ctx.strokeStyle = significant[i] ? '#1b5e20' : '#444'; ctx.beginPath(); ctx.moveTo(xL,y); ctx.lineTo(xH,y);
+        const cap=5; ctx.moveTo(xL,y-cap/2); ctx.lineTo(xL,y+cap/2); ctx.moveTo(xH,y-cap/2); ctx.lineTo(xH,y+cap/2); ctx.stroke(); }
+      // zero line
+      const zeroX = xScale.getPixelForValue(0); ctx.strokeStyle='#999'; ctx.lineWidth=1; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(zeroX, chart.chartArea.top); ctx.lineTo(zeroX, chart.chartArea.bottom); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); } };
+
+    matchImpactChart = new Chart(canvas.getContext('2d'), {
+      type:'scatter',
+      data:{ datasets:[{ label:'Match Win Rate Δ % (mean)', data: means.map((m,i)=>({x:m,y:labels[i]})), showLine:false, pointRadius:5, pointHoverRadius:7, pointBackgroundColor: means.map((v,i)=> significant[i] ? (v>=0?'#1976d2':'#c62828') : (v>=0?'#64b5f6':'#ef9a9a')), pointBorderColor: means.map(v=> v>=0?'#0d47a1':'#b71c1c'), pointBorderWidth:1.5 }]},
+      options:{ responsive:true, maintainAspectRatio:false, animation:false, parsing:false,
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=> items[0].raw && items[0].raw.y, label:(ctx)=>{ const i=ctx.dataIndex; const mean=means[i]; const lo=lowers[i]; const hi=uppers[i]; const sig=significant[i]?' (significant)':''; return `${mean>=0?'+':''}${mean.toFixed(2)}%  CI [${lo>=0?'+':''}${lo.toFixed(2)}%, ${hi>=0?'+':''}${hi.toFixed(2)}%]${sig}`; } } }, title:{display:true,text:'Match Win Rate Impact (mean & 95% CI)'} },
+        scales:{
+          x:{ title:{display:true,text:'Δ Win Rate %'}, min:xMin, max:xMax, ticks:{ callback:v=> (v>0?'+':'')+v+'%' } },
+          y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:6, autoSkip:false, font:{ size:12 } } }
         }
-      }
+      }, plugins:[errorBarPlugin]
     });
-  } catch (e) {
-    console.warn('Chart render failed', e);
-  }
+  } catch(e) { console.warn('renderMatchImpactChart failed', e); }
 }
 async function api(path, options={}) {
   startWorking();
@@ -153,17 +109,17 @@ async function refreshTeams() {
   try {
     const data = await api('/api/teams');
     const list = document.getElementById('teamList');
-    list.innerHTML = '';
-    data.teams.forEach(t => {
-      const li = document.createElement('li');
+    if (!list) return; // defensive
+    list.innerHTML='';
+    data.teams.forEach(t=>{
+      const li=document.createElement('li');
       li.innerHTML = `<span>${t.name || '(unnamed)'} <small>${t.file || ''}</small></span>`;
       list.appendChild(li);
     });
-  } catch (e) { out(e.message); }
+  } catch(e){ out(e.message); }
 }
 
 async function createTeam() {
-  startWorking('Creating team');
   const name = document.getElementById('newTeamName').value.trim();
   const template = document.getElementById('newTeamTemplate').value;
   if (!name) return out('Enter a team name');
@@ -216,9 +172,9 @@ async function skillsCommon(opts) {
     if (improve) payload.improve = improve;
     const res = await api('/api/skills', { method: 'POST', body: JSON.stringify(payload) });
     out(res); // keep textual JSON in collapsible output
-    lastSkillsData = res.results;
-    if (res && res.results) {
-      renderSkillsChart(res.results);
+    // Statistical analysis multi-run: directly render chart
+    if (res.statistical_analysis) {
+      renderMatchImpactChart(res);
     }
   } catch (e) { out(e.message); }
 }

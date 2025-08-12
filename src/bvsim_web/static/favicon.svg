@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Simple volleyball-inspired icon: circle with panel lines -->
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1976d2"/>
+      <stop offset="100%" stop-color="#0d47a1"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#g)" stroke="#ffffff" stroke-width="2"/>
+  <!-- Panel arcs -->
+  <path d="M12 20c10 0 18 8 18 18 0 6-2 11-6 16" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M24 10c8 8 20 12 32 10" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M14 34c12-2 24 2 34 12" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+</svg>

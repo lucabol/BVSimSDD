@@ -377,3 +377,11 @@ def register_routes(app: Flask) -> None:
     @app.get("/")
     def index_root():
         return app.send_static_file("index.html")
+
+    # Favicon route: serve single SVG for all favicon requests (lightweight, modern browsers support SVG)
+    @app.get('/favicon.ico')
+    def favicon():
+        svg_path = Path(app.static_folder) / 'favicon.svg'
+        if svg_path.exists():
+            return send_file(str(svg_path), mimetype='image/svg+xml')
+        return ('', 204)

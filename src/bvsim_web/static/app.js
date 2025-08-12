@@ -3,6 +3,33 @@ let matchImpactChart = null;
 let lastSkillsData = null; // reserved for future use (e.g., re-sorting)
 // Removed legacy skillsChart variable
 
+// --- Status / progress helpers ---
+function setMatchImpactStatus(msg, spinning=true) {
+  const el = document.getElementById('matchImpactStatus');
+  if (!el) return;
+  if (!msg) { el.textContent=''; return; }
+  el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
+}
+function clearMatchImpactDisplay() {
+  const canvas = document.getElementById('matchImpactChart');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    // Clear drawing surface
+    ctx.clearRect(0,0,canvas.width || canvas.clientWidth, canvas.height || canvas.clientHeight);
+  }
+  const legend = document.getElementById('matchImpactLegend');
+  if (legend) legend.innerHTML='';
+  const table = document.getElementById('matchImpactTableContainer');
+  if (table) table.innerHTML='';
+  if (matchImpactChart) { try { matchImpactChart.destroy(); } catch(_){} matchImpactChart=null; }
+}
+function setSkillsStatus(msg, spinning=true){
+  const el = document.getElementById('skillsStatus');
+  if (!el) return;
+  if (!msg) { el.textContent=''; return; }
+  el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
+}
+
 function toggleOutput() {
   const outEl = document.getElementById('output');
   const tog = document.getElementById('outputToggle');
@@ -20,6 +47,9 @@ function startWorking(msg = 'Working') {
   let dots = 0;
   clearWorking();
   el.textContent = msg;
+  // Show global activity also in chart area
+  clearMatchImpactDisplay();
+  setMatchImpactStatus('Processing request...', true);
   spinnerTimer = setInterval(() => {
     dots = (dots + 1) % 4;
     el.textContent = msg + '.'.repeat(dots);
@@ -47,8 +77,7 @@ function renderMatchImpactChart(stat) {
 
   // Sort & select top skills by descending mean impact (most positive first)
   const skills = (stat.skills || []).slice().sort((a,b)=> b.match.mean - a.match.mean);
-    const TOP_N = 30;
-    const topSkills = skills.slice(0, TOP_N);
+    const topSkills = skills; // now show all parameters
     const labels = topSkills.map(s=> s.parameter);
     const means = topSkills.map(s=> s.match.mean);
     const lowers = topSkills.map(s=> s.match.lower);
@@ -92,6 +121,9 @@ function renderMatchImpactChart(stat) {
         }
       }, plugins:[errorBarPlugin]
     });
+
+  // Clear status once finished rendering
+  setMatchImpactStatus('', false);
 
     // Build legend
     const legendEl = document.getElementById('matchImpactLegend');
@@ -137,7 +169,7 @@ function renderMatchImpactChart(stat) {
       const subHeaderPoint = hasPoint ? `<tr><th>Parameter</th><th>Mean</th><th>Lower</th><th>Upper</th><th>Match Mean</th><th>Match Lower</th><th>Match Upper</th><th>Significant?</th></tr>` : '';
       // Simpler single header row to keep size small
       const header = `<tr><th>Parameter</th>${hasPoint?'<th>Point Mean</th><th>Point Low</th><th>Point High</th>':''}<th>Match Mean</th><th>Match Low</th><th>Match High</th><th>Significant</th></tr>`;
-      tableContainer.innerHTML = `<table class="match-impact"><thead>${header}</thead><tbody>${rows}</tbody><caption>Top ${topSkills.length} parameters by match impact. Values show percentage point change (Δ) in win probability. Confidence intervals at 95% level.</caption></table>`;
+  tableContainer.innerHTML = `<table class="match-impact"><thead>${header}</thead><tbody>${rows}</tbody><caption>All ${topSkills.length} parameters by match impact. Values show percentage point change (Δ) in win probability. Confidence intervals at 95% level.</caption></table>`;
     }
   } catch(e) { console.warn('renderMatchImpactChart failed', e); }
 }
@@ -211,6 +243,7 @@ function simulateAccurate() { simulateCommon({ accurate: true }); }
 
 async function skillsCommon(opts) {
   startWorking('Analyzing skills');
+  setSkillsStatus('Running skills analysis...', true);
   try {
     const team = document.getElementById('skillsTeam').value.trim();
     const opponent = document.getElementById('skillsOpponent').value.trim();
@@ -246,6 +279,7 @@ async function skillsCommon(opts) {
       // Future multi-run pathway
       renderMatchImpactChart(res);
     }
+  setSkillsStatus('Skills analysis complete.', false);
   } catch (e) { out(e.message); }
 }
 function skillsAnalysis() { skillsCommon({}); }

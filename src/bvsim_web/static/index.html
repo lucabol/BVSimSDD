@@ -31,6 +31,9 @@ table.match-impact tbody tr:hover { background:#e1edf7; }
 table.match-impact .sig-pos { color:#0d652d; font-weight:600; }
 table.match-impact .sig-neg { color:#b71c1c; font-weight:600; }
 table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem; color:#555; }
+.status { font-size:.65rem; color:#555; margin-top:4px; min-height:14px; }
+.status .spinner { display:inline-block; width:10px; height:10px; border:2px solid #1976d2; border-top-color:transparent; border-radius:50%; animation:spin 0.7s linear infinite; margin-right:4px; }
+@keyframes spin { to { transform:rotate(360deg); } }
 </style>
 </head>
 <body>
@@ -89,6 +92,7 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem;
       <button onclick="skillsQuick()" class="secondary">Quick</button>
       <button onclick="skillsAccurate()" class="secondary">Accurate</button>
     </div>
+  <div id="skillsStatus" class="status"></div>
   </section>
 
   <section id="compare">
@@ -117,6 +121,7 @@ table.match-impact caption { caption-side:bottom; padding:4px; font-size:.65rem;
     <canvas id="matchImpactChart" height="160" style="max-height:340px"></canvas>
   <div id="matchImpactLegend" style="display:flex;flex-wrap:wrap;margin-top:4px"></div>
   <div id="matchImpactTableContainer"></div>
+  <div id="matchImpactStatus" class="status"></div>
   </section>
 
   <section style="flex:1 1 100%">

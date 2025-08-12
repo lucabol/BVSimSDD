@@ -160,10 +160,10 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
         <h2>Simulate</h2>
       </header>
       <div class="section-body">
-        <label>Team A</label>
-        <input id="simTeamA" placeholder="team_a.yaml or name" />
-        <label>Team B</label>
-        <input id="simTeamB" placeholder="team_b.yaml or name" />
+  <label>Team A</label>
+  <select id="simTeamA"></select>
+  <label>Team B</label>
+  <select id="simTeamB"></select>
         <div class="flex-row">
           <div>
             <label>Points</label>
@@ -183,10 +183,10 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
         <h2>Skills</h2>
       </header>
       <div class="section-body">
-        <label>Team</label>
-        <input id="skillsTeam" placeholder="team_a.yaml or name" />
-        <label>Opponent</label>
-        <input id="skillsOpponent" placeholder="team_b.yaml or name" />
+  <label>Team</label>
+  <select id="skillsTeam"></select>
+  <label>Opponent</label>
+  <select id="skillsOpponent"></select>
         <label>Improve (e.g. 5% or 0.05)</label>
         <input id="skillsImprove" placeholder="5%" />
         <div class="flex-row">
@@ -219,8 +219,8 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
       </header>
       <div class="section-body">
         <div class="examples-inline">
-          <div><label>Team A</label><input id="exTeamA" /></div>
-          <div><label>Team B</label><input id="exTeamB" /></div>
+          <div><label>Team A</label><select id="exTeamA"></select></div>
+          <div><label>Team B</label><select id="exTeamB"></select></div>
           <div><label>Count</label><input id="exCount" type="number" value="5" /></div>
           <div style="display:flex;align-items:flex-end"><button onclick="runExamples()">Generate</button></div>
         </div>

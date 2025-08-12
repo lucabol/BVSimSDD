@@ -286,6 +286,31 @@ async function refreshTeams() {
       li.innerHTML = `<span>${t.name || '(unnamed)'} <small>${t.file || ''}</small></span>`;
       list.appendChild(li);
     });
+    // Populate selects (simulation, skills, examples) with Basic (default), Advanced, then available teams
+    const selects = ['simTeamA','simTeamB','skillsTeam','skillsOpponent','exTeamA','exTeamB']
+      .map(id => document.getElementById(id))
+      .filter(el => el && el.tagName === 'SELECT');
+    if (selects.length) {
+      selects.forEach(sel => {
+        const prev = sel.value; // try to preserve selection
+        sel.innerHTML = '';
+        const optBasic = document.createElement('option'); optBasic.value=''; optBasic.textContent='Basic'; sel.appendChild(optBasic);
+        const optAdv = document.createElement('option'); optAdv.value='__ADVANCED__'; optAdv.textContent='Advanced'; sel.appendChild(optAdv);
+        // Add a divider disabled option if teams exist
+        if (data.teams.length) {
+          const optGroupLabel = document.createElement('option'); optGroupLabel.disabled = true; optGroupLabel.textContent='── Available Teams ──'; sel.appendChild(optGroupLabel);
+        }
+        data.teams.forEach(t => {
+          if (!t.name) return;
+          const o = document.createElement('option');
+          o.value = t.file || t.name; // allow file reference; backend load_team handles variations
+          o.textContent = t.name;
+          sel.appendChild(o);
+        });
+        // Restore previous selection if still present; else default to Basic (empty string)
+        if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev; else sel.value='';
+      });
+    }
   } catch(e){ out(e.message); }
 }
 

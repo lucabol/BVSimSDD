@@ -135,25 +135,28 @@ def register_routes(app: Flask) -> None:
         try:
             # Determine teams based on provided values
             if not team_a_raw and not team_b_raw:
-                # Both blank -> basic vs advanced (explicit requirement)
-                    team_a = Team.from_dict(get_basic_template("Team A"))
-                    team_b = Team.from_dict(get_basic_template("Team B"))
-                    used_defaults = True
-                    note = "Both team names blank; using Basic templates (Team A vs Team B)."
+                team_a = Team.from_dict(get_basic_template("Team A"))
+                team_b = Team.from_dict(get_basic_template("Team B"))
+                used_defaults = True
+                note = "Both team names blank; using Basic templates (Team A vs Team B)."
             else:
                 note_parts = []
-                # Team A (blank -> basic)
                 if not team_a_raw:
                     team_a = Team.from_dict(get_basic_template("Team A"))
                     used_defaults = True
                     note_parts.append("Team A blank -> Basic template")
+                elif team_a_raw == "__ADVANCED__":
+                    team_a = Team.from_dict(get_advanced_template("Team A"))
+                    note_parts.append("Team A Advanced template")
                 else:
                     team_a = load_team(team_a_raw)
-                # Team B (blank -> basic per new rule)
                 if not team_b_raw:
                     team_b = Team.from_dict(get_basic_template("Team B"))
                     used_defaults = True
                     note_parts.append("Team B blank -> Basic template")
+                elif team_b_raw == "__ADVANCED__":
+                    team_b = Team.from_dict(get_advanced_template("Team B"))
+                    note_parts.append("Team B Advanced template")
                 else:
                     team_b = load_team(team_b_raw)
                 note = "; ".join(note_parts) if note_parts else None
@@ -163,7 +166,6 @@ def register_routes(app: Flask) -> None:
             elif accurate:
                 num_points = 400_000
             else:
-                # Standard default: 200k points
                 num_points = points or 200_000
 
             sim_data = run_large_simulation(team_a=team_a, team_b=team_b, num_points=num_points, seed=seed, show_progress=False)
@@ -206,7 +208,6 @@ def register_routes(app: Flask) -> None:
             return jsonify(payload)
         except Exception as e:
             traceback.print_exc()
-            # Distinguish missing team file from other errors
             if isinstance(e, FileNotFoundError):
                 return error_response(str(e), 404)
             return error_response(f"Simulation failed: {e}", 500)
@@ -220,18 +221,27 @@ def register_routes(app: Flask) -> None:
         teams = []
         try:
             if len(team_names) == 0:
-                # Basic vs Advanced when empty
-                    teams = [Team.from_dict(get_basic_template("Team A")), Team.from_dict(get_basic_template("Team B"))]
-                    used_defaults = True
-                    note = "No teams supplied; using Basic templates (Team A vs Team B)."
+                # Default: Basic vs Basic
+                teams = [Team.from_dict(get_basic_template("Team A")), Team.from_dict(get_basic_template("Team B"))]
+                used_defaults = True
+                note = "No teams supplied; using Basic templates (Team A vs Team B)."
             elif len(team_names) == 1:
-                # One provided -> load it + Basic
-                teams.append(load_team(team_names[0]))
+                # One provided -> load it (or advanced sentinel) + Basic
+                tn = team_names[0]
+                if tn == "__ADVANCED__":
+                    teams.append(Team.from_dict(get_advanced_template("Team A")))
+                else:
+                    teams.append(load_team(tn))
                 teams.append(Team.from_dict(get_basic_template("Team B")))
                 used_defaults = True
                 note = "Only one team supplied; opponent set to Basic template (Team B)."
             else:
-                teams = [load_team(n) for n in team_names]
+                teams = []
+                for i, n in enumerate(team_names):
+                    if n == "__ADVANCED__":
+                        teams.append(Team.from_dict(get_advanced_template(f"Team {chr(65+i)}")))
+                    else:
+                        teams.append(load_team(n))
                 if len(teams) < 2:
                     return error_response("Need at least two valid teams")
         except FileNotFoundError as e:
@@ -310,23 +320,29 @@ def register_routes(app: Flask) -> None:
             used_defaults = False
             note = None
             if not team_name_raw and not opponent_name_raw:
-                # Both blank -> Basic vs Advanced (explicit requirement for skills analysis)
-                    team = Team.from_dict(get_basic_template("Team A"))
-                    opponent = Team.from_dict(get_basic_template("Team B"))
-                    used_defaults = True
-                    note = "Both team names blank; using Basic templates (Team A vs Team B)."
+                # Default both Basic
+                team = Team.from_dict(get_basic_template("Team A"))
+                opponent = Team.from_dict(get_basic_template("Team B"))
+                used_defaults = True
+                note = "Both team names blank; using Basic templates (Team A vs Team B)."
             else:
                 note_parts = []
                 if not team_name_raw:
                     team = Team.from_dict(get_basic_template("Team A"))
                     used_defaults = True
                     note_parts.append("Team blank -> Basic template")
+                elif team_name_raw == "__ADVANCED__":
+                    team = Team.from_dict(get_advanced_template("Team A"))
+                    note_parts.append("Team Advanced template")
                 else:
                     team = load_team(team_name_raw)
                 if not opponent_name_raw:
                     opponent = Team.from_dict(get_basic_template("Team B"))  # other defaults to Basic per rule
                     used_defaults = True
                     note_parts.append("Opponent blank -> Basic template")
+                elif opponent_name_raw == "__ADVANCED__":
+                    opponent = Team.from_dict(get_advanced_template("Team B"))
+                    note_parts.append("Opponent Advanced template")
                 else:
                     opponent = load_team(opponent_name_raw)
                 if note_parts:

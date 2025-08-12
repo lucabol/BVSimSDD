@@ -56,7 +56,7 @@ function renderMatchImpactChart(stat) {
     const significant = topSkills.map(s=> !!s.significant);
 
     // Dynamic height per skill
-    const BASE_ROW_HEIGHT = 26; const MIN_HEIGHT = 260;
+  const BASE_ROW_HEIGHT = 36; const MIN_HEIGHT = 320; // increased spacing for readability
     const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 40);
     canvas.style.height = desiredHeight + 'px';
 
@@ -79,7 +79,7 @@ function renderMatchImpactChart(stat) {
       // zero line
       const zeroX = xScale.getPixelForValue(0); ctx.strokeStyle='#999'; ctx.lineWidth=1; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.moveTo(zeroX, chart.chartArea.top); ctx.lineTo(zeroX, chart.chartArea.bottom); ctx.stroke(); ctx.setLineDash([]); ctx.restore(); } };
 
-    matchImpactChart = new Chart(canvas.getContext('2d'), {
+  matchImpactChart = new Chart(canvas.getContext('2d'), {
       type:'scatter',
       data:{ datasets:[{ label:'Match Win Rate Δ % (mean)', data: means.map((m,i)=>({x:m,y:labels[i]})), showLine:false, pointRadius:5, pointHoverRadius:7, pointBackgroundColor: means.map((v,i)=> significant[i] ? (v>=0?'#1976d2':'#c62828') : (v>=0?'#64b5f6':'#ef9a9a')), pointBorderColor: means.map(v=> v>=0?'#0d47a1':'#b71c1c'), pointBorderWidth:1.5 }]},
       options:{ responsive:true, maintainAspectRatio:false, animation:false, parsing:false,
@@ -90,6 +90,24 @@ function renderMatchImpactChart(stat) {
         }
       }, plugins:[errorBarPlugin]
     });
+
+    // Build legend
+    const legendEl = document.getElementById('matchImpactLegend');
+    if (legendEl) {
+      legendEl.innerHTML = '';
+      const entries = [
+        { color:'#1976d2', label:'Significant positive (CI excludes 0, mean > 0)' },
+        { color:'#c62828', label:'Significant negative (CI excludes 0, mean < 0)' },
+        { color:'#64b5f6', label:'Non-significant positive (CI includes 0)' },
+        { color:'#ef9a9a', label:'Non-significant negative (CI includes 0)' }
+      ];
+      entries.forEach(e=>{
+        const item=document.createElement('div');
+        item.style.display='flex'; item.style.alignItems='center'; item.style.gap='6px'; item.style.fontSize='0.7rem'; item.style.margin='2px 12px 2px 0';
+        const swatch=document.createElement('span'); swatch.style.width='14px'; swatch.style.height='14px'; swatch.style.borderRadius='50%'; swatch.style.background=e.color; swatch.style.border='1px solid #133';
+        item.appendChild(swatch); const txt=document.createElement('span'); txt.textContent=e.label; item.appendChild(txt); legendEl.appendChild(item);
+      });
+    }
   } catch(e) { console.warn('renderMatchImpactChart failed', e); }
 }
 async function api(path, options={}) {

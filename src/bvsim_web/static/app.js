@@ -87,8 +87,8 @@ function renderMatchImpactChart(stat) {
   // Dynamic height per skill
   // Increased base row height & minimum height to create more vertical space between lines.
   // (Was BASE_ROW_HEIGHT=36, MIN_HEIGHT=320)
-  const BASE_ROW_HEIGHT = 46; const MIN_HEIGHT = 420; // tweak as needed for readability
-  const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 60);
+  const BASE_ROW_HEIGHT = 35; const MIN_HEIGHT = 280; // balanced height for readability
+  const desiredHeight = Math.max(MIN_HEIGHT, BASE_ROW_HEIGHT * topSkills.length + 80);
     canvas.style.height = desiredHeight + 'px';
 
     // Destroy prior chart
@@ -117,7 +117,7 @@ function renderMatchImpactChart(stat) {
         plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=> items[0].raw && items[0].raw.y, label:(ctx)=>{ const i=ctx.dataIndex; const mean=means[i]; const lo=lowers[i]; const hi=uppers[i]; const sig=significant[i]?' (significant)':''; return `${mean>=0?'+':''}${mean.toFixed(2)}%  CI [${lo>=0?'+':''}${lo.toFixed(2)}%, ${hi>=0?'+':''}${hi.toFixed(2)}%]${sig}`; } } }, title:{display:true,text:'Match Win Rate Impact (mean & 95% CI)'} },
         scales:{
           x:{ title:{display:true,text:'Δ Win Rate %'}, min:xMin, max:xMax, ticks:{ callback:v=> (v>0?'+':'')+v+'%' } },
-          y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:10, autoSkip:false, font:{ size:12 } } }
+          y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:15, autoSkip:false, font:{ size:13 }, maxRotation:0, minRotation:0 } }
         }
       }, plugins:[errorBarPlugin]
     });

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>BVSim Web</title>
+<style>
+body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+header { background:#0d47a1; color:#fff; padding:12px 20px; }
+main { padding:16px; display:flex; flex-wrap:wrap; gap:24px; }
+section { flex:1 1 400px; min-width:360px; background:#f5f7fa; padding:12px 16px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+h2 { margin-top:0; font-size:1.1rem; }
+label { display:block; margin-top:6px; font-size:.85rem; font-weight:600; }
+input, select, button, textarea { width:100%; margin-top:2px; padding:6px 8px; font-size:.9rem; }
+button { cursor:pointer; background:#1976d2; color:#fff; border:none; border-radius:4px; margin-top:8px; }
+button.secondary { background:#546e7a; }
+#output { white-space:pre-wrap; font-family:monospace; background:#111; color:#eee; padding:12px; border-radius:8px; max-height:400px; overflow:auto; }
+ul.team-list { list-style:none; padding:0; margin:0; }
+ul.team-list li { padding:4px 0; display:flex; justify-content:space-between; font-size:.85rem; border-bottom:1px solid #ddd; }
+small { color:#555; }
+.flex { display:flex; gap:8px; }
+.flex > div { flex:1; }
+.badge { background:#1976d2; color:#fff; padding:2px 6px; border-radius:4px; font-size:.7rem; }
+footer { margin-top:24px; padding:12px 20px; font-size:.75rem; color:#555; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BVSim Web Interface</h1>
+</header>
+<main>
+  <section id="teams">
+    <h2>Teams</h2>
+    <div class="flex">
+      <div>
+        <label>Create Team</label>
+        <input id="newTeamName" placeholder="Name" />
+        <select id="newTeamTemplate">
+          <option value="basic">Basic Template</option>
+          <option value="advanced">Advanced Template</option>
+        </select>
+        <button onclick="createTeam()">Create</button>
+      </div>
+      <div>
+        <label>Upload Team YAML</label>
+        <input type="file" id="uploadTeamFile" accept=".yaml,.yml" />
+        <button onclick="uploadTeam()">Upload</button>
+      </div>
+    </div>
+    <h3>Available Teams</h3>
+    <ul class="team-list" id="teamList"></ul>
+    <button class="secondary" onclick="refreshTeams()">Refresh</button>
+  </section>
+
+  <section id="simulate">
+    <h2>Simulate</h2>
+    <label>Team A</label>
+    <input id="simTeamA" placeholder="team_a.yaml or name" />
+    <label>Team B</label>
+    <input id="simTeamB" placeholder="team_b.yaml or name" />
+    <label>Points (blank=default)</label>
+    <input id="simPoints" type="number" />
+    <div class="flex">
+      <button onclick="simulate()">Run Simulation</button>
+      <button onclick="simulateQuick()" class="secondary">Quick</button>
+      <button onclick="simulateAccurate()" class="secondary">Accurate</button>
+    </div>
+  </section>
+
+  <section id="skills">
+    <h2>Skills Analysis</h2>
+    <label>Team</label>
+    <input id="skillsTeam" placeholder="team_a.yaml or name" />
+    <label>Opponent (optional)</label>
+    <input id="skillsOpponent" placeholder="team_b.yaml or name" />
+    <label>Improve (e.g. 5% or 0.05)</label>
+    <input id="skillsImprove" placeholder="5%" />
+    <div class="flex">
+      <button onclick="skillsAnalysis()">Analyze</button>
+      <button onclick="skillsQuick()" class="secondary">Quick</button>
+      <button onclick="skillsAccurate()" class="secondary">Accurate</button>
+    </div>
+  </section>
+
+  <section id="compare">
+    <h2>Compare Teams</h2>
+    <label>Teams (comma separated)</label>
+    <input id="compareTeams" placeholder="team_a.yaml,team_b.yaml" />
+    <div class="flex">
+      <button onclick="compareTeamsRun()">Compare</button>
+      <button onclick="compareQuick()" class="secondary">Quick</button>
+      <button onclick="compareAccurate()" class="secondary">Accurate</button>
+    </div>
+  </section>
+
+  <section id="examplesSection">
+    <h2>Rally Examples</h2>
+    <label>Team A</label><input id="exTeamA" />
+    <label>Team B</label><input id="exTeamB" />
+    <label>Count</label><input id="exCount" type="number" value="5" />
+  <button onclick="runExamples()">Generate</button>
+  </section>
+
+  <section style="flex:1 1 100%">
+    <h2>Output</h2>
+    <div id="output"></div>
+  </section>
+</main>
+<footer>
+  BVSim Web MVP - Generated interface. Edit YAML files directly to fine-tune probabilities.
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

@@ -41,7 +41,13 @@ def load_team(name_or_file: str) -> Team:
     if p.suffix:
         search_names.append(p.name)
     else:
-        search_names.append(p.name + '.yaml')
+        # Accept raw name which could correspond to 'name.yaml' or 'team_<normalized>.yaml'
+        base = p.name
+        normalized = base.lower().replace(' ', '_')
+        search_names.extend([
+            base + '.yaml',
+            f'team_{normalized}.yaml'
+        ])
     # candidate directories: cwd, cwd/.. (project root), cwd/../templates maybe not needed
     dirs = [Path.cwd(), Path.cwd().parent]
     for directory in dirs:
@@ -130,10 +136,10 @@ def register_routes(app: Flask) -> None:
             # Determine teams based on provided values
             if not team_a_raw and not team_b_raw:
                 # Both blank -> basic vs advanced (explicit requirement)
-                team_a = Team.from_dict(get_basic_template("Team A"))
-                team_b = Team.from_dict(get_advanced_template("Team B"))
-                used_defaults = True
-                note = "Both team names blank; using Basic (Team A) vs Advanced (Team B)."
+                    team_a = Team.from_dict(get_basic_template("Team A"))
+                    team_b = Team.from_dict(get_basic_template("Team B"))
+                    used_defaults = True
+                    note = "Both team names blank; using Basic templates (Team A vs Team B)."
             else:
                 note_parts = []
                 # Team A (blank -> basic)
@@ -215,9 +221,9 @@ def register_routes(app: Flask) -> None:
         try:
             if len(team_names) == 0:
                 # Basic vs Advanced when empty
-                teams = [Team.from_dict(get_basic_template("Team A")), Team.from_dict(get_advanced_template("Team B"))]
-                used_defaults = True
-                note = "No teams supplied; using Basic (Team A) vs Advanced (Team B)."
+                    teams = [Team.from_dict(get_basic_template("Team A")), Team.from_dict(get_basic_template("Team B"))]
+                    used_defaults = True
+                    note = "No teams supplied; using Basic templates (Team A vs Team B)."
             elif len(team_names) == 1:
                 # One provided -> load it + Basic
                 teams.append(load_team(team_names[0]))
@@ -257,8 +263,15 @@ def register_routes(app: Flask) -> None:
         count = int(data.get("count", 5))
         seed = data.get("seed")
         try:
-            team_a = load_team(team_a_name, "Team A")
-            team_b = load_team(team_b_name, "Team B")
+            # New rule: any blank (defaulted to label Team A/Team B) should resolve to Basic template if file not found
+            try:
+                team_a = load_team(team_a_name)
+            except FileNotFoundError:
+                team_a = Team.from_dict(get_basic_template("Team A"))
+            try:
+                team_b = load_team(team_b_name)
+            except FileNotFoundError:
+                team_b = Team.from_dict(get_basic_template("Team B"))
             rallies = []
             for i in range(count):
                 serving_team = 'A' if i % 2 == 0 else 'B'
@@ -298,10 +311,10 @@ def register_routes(app: Flask) -> None:
             note = None
             if not team_name_raw and not opponent_name_raw:
                 # Both blank -> Basic vs Advanced (explicit requirement for skills analysis)
-                team = Team.from_dict(get_basic_template("Team A"))
-                opponent = Team.from_dict(get_advanced_template("Team B"))
-                used_defaults = True
-                note = "Both team names blank; using Basic (Team A) vs Advanced (Team B)."
+                    team = Team.from_dict(get_basic_template("Team A"))
+                    opponent = Team.from_dict(get_basic_template("Team B"))
+                    used_defaults = True
+                    note = "Both team names blank; using Basic templates (Team A vs Team B)."
             else:
                 note_parts = []
                 if not team_name_raw:

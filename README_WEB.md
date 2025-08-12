@@ -5,10 +5,11 @@ A minimal Flask-based web UI exposing the core BVSim simulator features without 
 ## Features
 - List / create / upload team YAML files (stored in working directory)
 - Run simulations with quick / standard / accurate presets (10k / 200k / 400k points)
-- Perform skills analysis (full skill impact or custom scenario files)
+- Perform skills analysis (full skill impact or custom scenario files) with graphical impact chart
 - Compare multiple teams
 - Generate rally examples
 - Download existing team YAML files
+- Collapsible raw JSON output panel (minimized by default) to keep UI clean
 
 ## Architecture
 Package `bvsim_web` (separate from core) provides:
@@ -48,6 +49,17 @@ app.run()
 ## Frontend
 Served at `/` (static). Uses fetch + simple DOM updates. All responses are JSON.
 
+### Visualization Pane
+Running a Skills Analysis now renders a bar/line composite chart (Chart.js) showing:
+- Baseline win rate (line)
+- New win rate per parameter improvement (bars, top 25 by absolute improvement)
+- Delta improvement line (right axis, point win rate delta in percentage points)
+
+Hover tooltips provide exact values. The underlying full JSON remains available in the Output panel.
+
+### Collapsible Output Panel
+The Output (raw JSON / logs) section is minimized by default to reduce scrolling. Click the Output header badge (Show / Hide) to toggle visibility. Programmatic writes do not auto-expand it— preserving user choice during iterative debugging.
+
 ## Notes & Limitations
 - Long-running analyses block request (consider async/job queue for large workloads later)
 - No authentication (intended for local usage / trusted environment)
@@ -61,11 +73,15 @@ For simulate, skills, and compare endpoints:
 - Standard (no flag, no explicit points): 200,000 points
 Providing an explicit `points` overrides all presets.
 
+### Default Team Selection Rules (Updated)
+- Simulate / Skills / Examples: If a team field is left blank, that side becomes a Basic template (Team A or Team B label). If both are blank, it runs Basic vs Basic.
+- Compare: If no teams are supplied, comparison runs Basic (Team A) vs Basic (Team B). A single provided team will be compared against a Basic template opponent (Team B).
+
 ## Future Enhancements
 1. Async job queue with progress polling
 2. WebSocket/live updates for long simulations
 3. Inline probability editor UI
-4. Chart visualizations (win rate matrices, skill impact bars)
+4. Additional chart visualizations (win rate matrices, multi-run confidence intervals)
 5. Authentication & role-based access
 6. Multi-run statistical skills endpoint parity with CLI
 7. Dockerfile for easy deployment

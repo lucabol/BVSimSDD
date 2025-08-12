@@ -1,4 +1,19 @@
 let spinnerTimer = null;
+let skillsChart = null;
+let lastSkillsData = null;
+
+function toggleOutput() {
+  const outEl = document.getElementById('output');
+  const tog = document.getElementById('outputToggle');
+  const isHidden = outEl.style.display === 'none';
+  if (isHidden) {
+    outEl.style.display = 'block';
+    tog.textContent = 'Hide';
+  } else {
+    outEl.style.display = 'none';
+    tog.textContent = 'Show';
+  }
+}
 function startWorking(msg = 'Working') {
   const el = document.getElementById('output');
   let dots = 0;
@@ -18,7 +33,108 @@ function clearWorking() {
 function out(obj) {
   clearWorking();
   const el = document.getElementById('output');
+  // Ensure output stays collapsed unless user opens it; do not auto-open
   el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+}
+
+function renderSkillsChart(results) {
+  try {
+    const ctx = document.getElementById('skillsChart');
+    if (!ctx || !results) return;
+    const baseline = results.baseline_win_rate; // percent value
+    const improvements = results.parameter_improvements || {};
+    const rows = Object.entries(improvements).map(([name, info]) => ({
+      name,
+      win_rate: info.win_rate, // already absolute win rate percent
+      improvement: info.improvement // delta in percent points
+    }));
+    // Sort by absolute improvement desc
+    rows.sort((a,b) => Math.abs(b.improvement) - Math.abs(a.improvement));
+    const top = rows.slice(0, 25);
+    const labels = top.map(r => r.name.split('.').slice(-2).join('.'));
+    const dataWin = top.map(r => r.win_rate);
+    const dataImprovement = top.map(r => r.improvement);
+    const baseLineData = new Array(top.length).fill(baseline);
+    if (skillsChart) {
+      skillsChart.destroy();
+    }
+    skillsChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            type: 'line',
+            label: 'Baseline',
+            data: baseLineData,
+            borderColor: '#888',
+            borderWidth: 1,
+            pointRadius: 0,
+            fill: false,
+            tension: 0
+          },
+            {
+            label: 'New Win Rate',
+            data: dataWin,
+            backgroundColor: dataImprovement.map(v => v >= 0 ? 'rgba(25,118,210,0.55)' : 'rgba(198,40,40,0.55)'),
+            borderColor: dataImprovement.map(v => v >= 0 ? 'rgba(25,118,210,1)' : 'rgba(198,40,40,1)'),
+            borderWidth: 1
+          },
+          {
+            label: 'Improvement (Δ)',
+            data: dataImprovement,
+            type: 'line',
+            yAxisID: 'y1',
+            borderColor: '#43a047',
+            backgroundColor: 'rgba(67,160,71,0.3)',
+            fill: true,
+            tension: 0.25
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                if (ctx.dataset.label === 'New Win Rate') {
+                  const imp = dataImprovement[ctx.dataIndex];
+                  return `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(2)}% (Δ ${imp >= 0 ? '+' : ''}${imp.toFixed(3)} pts)`;
+                }
+                if (ctx.dataset.label === 'Baseline') {
+                  return `Baseline: ${baseline.toFixed(2)}%`;
+                }
+                if (ctx.dataset.label.startsWith('Improvement')) {
+                  return `Δ: ${ctx.parsed.y.toFixed(3)} pts`;
+                }
+                return `${ctx.dataset.label}: ${ctx.parsed.y}`;
+              }
+            }
+          },
+          legend: { display: true }
+        },
+        scales: {
+          y: {
+            title: { display: true, text: 'Win Rate %' },
+            beginAtZero: false,
+            suggestedMin: Math.max(0, baseline - 5),
+            suggestedMax: Math.min(100, baseline + 5)
+          },
+          y1: {
+            position: 'right',
+            grid: { drawOnChartArea: false },
+            title: { display: true, text: 'Improvement Δ pts' }
+          },
+          x: { ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 } }
+        }
+      }
+    });
+  } catch (e) {
+    console.warn('Chart render failed', e);
+  }
 }
 async function api(path, options={}) {
   startWorking();
@@ -99,7 +215,11 @@ async function skillsCommon(opts) {
     if (opponent) payload.opponent = opponent;
     if (improve) payload.improve = improve;
     const res = await api('/api/skills', { method: 'POST', body: JSON.stringify(payload) });
-    out(res);
+    out(res); // keep textual JSON in collapsible output
+    lastSkillsData = res.results;
+    if (res && res.results) {
+      renderSkillsChart(res.results);
+    }
   } catch (e) { out(e.message); }
 }
 function skillsAnalysis() { skillsCommon({}); }

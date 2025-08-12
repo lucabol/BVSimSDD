@@ -224,33 +224,46 @@ function renderSimulationChart(sim) {
     let breakdownHTML = '';
     if (sim.breakdown) {
       const bd = sim.breakdown;
-      // Point type percentage table
+      // Point type distribution with % of total points
       if (bd.point_type_breakdown || bd.point_type_percentages) {
         const ptCounts = bd.point_type_breakdown || {};
         const ptPerc = bd.point_type_percentages || {};
-        const rows = Object.keys(ptCounts).sort().map(k=> `<tr><td>${k}</td><td>${ptCounts[k]}</td><td>${(ptPerc[k]||0).toFixed(2)}%</td></tr>`).join('');
-        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>%</th></tr></thead><tbody>${rows}</tbody><caption>Distribution of point result types.</caption></table>`;
+        const totalPts = Object.values(ptCounts).reduce((a,b)=>a+b,0) || 1;
+        const rows = Object.keys(ptCounts).sort().map(k=> {
+          const cnt = ptCounts[k];
+          const pct = ptPerc[k] != null ? ptPerc[k] : (cnt/totalPts*100);
+          return `<tr><td>${k}</td><td>${cnt}</td><td>${pct.toFixed(2)}%</td></tr>`;}).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>% of Points</th></tr></thead><tbody>${rows}</tbody><caption>Distribution of point result types.</caption></table>`;
       }
-      // Team-specific point type wins
+      // Point type wins by team with share of that team's wins
       if (bd.team_a_point_types || bd.team_b_point_types) {
         const aPT = bd.team_a_point_types || {}; const bPT = bd.team_b_point_types || {};
         const types = Array.from(new Set([...Object.keys(aPT), ...Object.keys(bPT)])).sort();
-        const rows = types.map(t=> `<tr><td>${t}</td><td>${aPT[t]||0}</td><td>${bPT[t]||0}</td></tr>`).join('');
-        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>${team_a} Wins</th><th>${team_b} Wins</th></tr></thead><tbody>${rows}</tbody><caption>Point type wins by team.</caption></table>`;
+        const aWins = sim.summary.team_a_wins || 1; const bWins = sim.summary.team_b_wins || 1;
+        const rows = types.map(t=> {
+          const aCnt = aPT[t]||0; const bCnt = bPT[t]||0;
+          const aPct = aCnt ? (aCnt / aWins * 100) : 0;
+          const bPct = bCnt ? (bCnt / bWins * 100) : 0;
+          return `<tr><td>${t}</td><td>${aCnt}</td><td>${aPct.toFixed(1)}%</td><td>${bCnt}</td><td>${bPct.toFixed(1)}%</td></tr>`; }).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>${team_a} Wins</th><th>${team_a} %Wins</th><th>${team_b} Wins</th><th>${team_b} %Wins</th></tr></thead><tbody>${rows}</tbody><caption>Point type wins with share of each team's total winning points.</caption></table>`;
       }
-      // Serving advantage
+      // Serving advantage with serve share
       if (bd.serving_advantage) {
         const sa = bd.serving_advantage;
+        const totalServes = (sa.team_a_serves || 0) + (sa.team_b_serves || 0) || 1;
+        const aServeShare = ((sa.team_a_serves || 0) / totalServes * 100).toFixed(1);
+        const bServeShare = ((sa.team_b_serves || 0) / totalServes * 100).toFixed(1);
         breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Metric</th><th>${team_a}</th><th>${team_b}</th></tr></thead><tbody>`+
           `<tr><td>Serve Win %</td><td>${sa.team_a_serve_win_rate.toFixed(2)}%</td><td>${sa.team_b_serve_win_rate.toFixed(2)}%</td></tr>`+
-          `<tr><td>Serves</td><td>${sa.team_a_serves}</td><td>${sa.team_b_serves}</td></tr>`+
-          `</tbody><caption>Serving performance metrics.</caption></table>`;
+          `<tr><td>Serves (Count / Share)</td><td>${sa.team_a_serves} / ${aServeShare}%</td><td>${sa.team_b_serves} / ${bServeShare}%</td></tr>`+
+          `</tbody><caption>Serving performance metrics including share of total serves.</caption></table>`;
       }
-      // Duration by type
+      // Duration by type with % of points
       if (bd.duration_by_type) {
         const dbt = bd.duration_by_type;
-        const rows = Object.keys(dbt).sort().map(k=>{ const v=dbt[k]; return `<tr><td>${k}</td><td>${v.count}</td><td>${v.average.toFixed(2)}</td><td>${v.min}</td><td>${v.max}</td></tr>`; }).join('');
-        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>Avg Dur</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody><caption>Point duration statistics.</caption></table>`;
+        const totalPtsDur = Object.values(dbt).reduce((acc,v)=>acc+ (v.count||0),0) || 1;
+        const rows = Object.keys(dbt).sort().map(k=>{ const v=dbt[k]; const pct=(v.count/totalPtsDur*100); return `<tr><td>${k}</td><td>${v.count}</td><td>${pct.toFixed(2)}%</td><td>${v.average.toFixed(2)}</td><td>${v.min}</td><td>${v.max}</td></tr>`; }).join('');
+        breakdownHTML += `<table class="match-impact" style="margin-top:8px"><thead><tr><th>Point Type</th><th>Count</th><th>% of Points</th><th>Avg Dur</th><th>Min</th><th>Max</th></tr></thead><tbody>${rows}</tbody><caption>Point duration statistics with frequency share.</caption></table>`;
       }
     }
     tableContainer.innerHTML = `<table class="match-impact"><thead><tr><th>Team</th><th>Win %</th><th>Wins</th></tr></thead><tbody><tr><td>${team_a}</td><td>${team_a_win_rate.toFixed(2)}%</td><td>${sim.summary.team_a_wins}</td></tr><tr><td>${team_b}</td><td>${team_b_win_rate.toFixed(2)}%</td><td>${sim.summary.team_b_wins}</td></tr></tbody><caption>Single simulation results with breakdown.</caption></table>` + breakdownHTML;
@@ -335,29 +348,21 @@ async function refreshTeams() {
       li.innerHTML = `<span>${t.name || '(unnamed)'} <small>${t.file || ''}</small></span>`;
       list.appendChild(li);
     });
-    // Populate selects (simulation, skills, examples) with Basic (default), Advanced, then available teams
+    // Populate selects with Basic, Advanced, then available teams
     const selects = ['simTeamA','simTeamB','skillsTeam','skillsOpponent','exTeamA','exTeamB']
       .map(id => document.getElementById(id))
       .filter(el => el && el.tagName === 'SELECT');
     if (selects.length) {
       selects.forEach(sel => {
-        const prev = sel.value; // try to preserve selection
-        sel.innerHTML = '';
-        const optBasic = document.createElement('option'); optBasic.value=''; optBasic.textContent='Basic'; sel.appendChild(optBasic);
-        const optAdv = document.createElement('option'); optAdv.value='__ADVANCED__'; optAdv.textContent='Advanced'; sel.appendChild(optAdv);
-        // Add a divider disabled option if teams exist
+        const prev = sel.value;
+        sel.innerHTML='';
+        const optBasic=document.createElement('option'); optBasic.value=''; optBasic.textContent='Basic'; sel.appendChild(optBasic);
+        const optAdv=document.createElement('option'); optAdv.value='__ADVANCED__'; optAdv.textContent='Advanced'; sel.appendChild(optAdv);
         if (data.teams.length) {
-          const optGroupLabel = document.createElement('option'); optGroupLabel.disabled = true; optGroupLabel.textContent='── Available Teams ──'; sel.appendChild(optGroupLabel);
+          const optGroupLabel=document.createElement('option'); optGroupLabel.disabled=true; optGroupLabel.textContent='── Available Teams ──'; sel.appendChild(optGroupLabel);
         }
-        data.teams.forEach(t => {
-          if (!t.name) return;
-          const o = document.createElement('option');
-          o.value = t.file || t.name; // allow file reference; backend load_team handles variations
-          o.textContent = t.name;
-          sel.appendChild(o);
-        });
-        // Restore previous selection if still present; else default to Basic (empty string)
-        if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev; else sel.value='';
+        data.teams.forEach(t=> { if(!t.name) return; const o=document.createElement('option'); o.value=t.file || t.name; o.textContent=t.name; sel.appendChild(o); });
+        if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value=prev; else sel.value='';
       });
     }
   } catch(e){ out(e.message); }

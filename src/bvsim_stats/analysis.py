@@ -10,6 +10,8 @@ from typing import List, Dict, Any
 import copy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
+import random
+import math
 
 # Add bvsim_core to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -17,6 +19,42 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from bvsim_core.team import Team
 from bvsim_core.state_machine import simulate_point
 from .models import SimulationResults, AnalysisResults, SensitivityResults, SensitivityDataPoint
+
+
+def simulate_volleyball_match(a_win_prob: float = 0.52, max_games: int = 5000, sets_to_win: int = 2,
+                              points_to_win_standard: int = 21, points_to_win_last: int = 15) -> float:
+    """Monte Carlo simulate matches to estimate match win rate for a given point win probability.
+    Reduced default max_games (5000) for speed when called many times; caller can adjust upstream if needed."""
+    a_wins = b_wins = 0
+    for _ in range(max_games):
+        a_sets = b_sets = 0
+        while a_sets < sets_to_win and b_sets < sets_to_win:
+            a_points = b_points = 0
+            points_to_win = points_to_win_standard if (a_sets + b_sets) < (2 * sets_to_win - 1) else points_to_win_last
+            while True:
+                if random.random() < a_win_prob:
+                    a_points += 1
+                else:
+                    b_points += 1
+                if (a_points >= points_to_win and a_points - b_points >= 2):
+                    a_sets += 1
+                    break
+                if (b_points >= points_to_win and b_points - a_points >= 2):
+                    b_sets += 1
+                    break
+            if a_sets == sets_to_win:
+                a_wins += 1; break
+            if b_sets == sets_to_win:
+                b_wins += 1; break
+    total = a_wins + b_wins
+    return (a_wins / total) if total else 0.5
+
+
+def point_to_match_impact(point_improvement: float, baseline_point_rate: float = 0.5) -> float:
+    """Convert a point win rate improvement (percentage points) to match win rate improvement (percentage points)."""
+    baseline_match_rate = simulate_volleyball_match(baseline_point_rate)
+    improved_match_rate = simulate_volleyball_match(min(max(baseline_point_rate + point_improvement/100.0, 0.0), 1.0))
+    return (improved_match_rate - baseline_match_rate) * 100.0
 
 
 def analyze_simulation_results(results: SimulationResults, breakdown: bool = False) -> AnalysisResults:
@@ -387,10 +425,30 @@ def _test_single_parameter(args_tuple):
         # Calculate win rate with parameter improvement
         new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
         improvement = new_win_rate - baseline_win_rate
-        
+        # Approximate 95% CI for improvement using binomial variance of two proportions
+        # Convert percent -> proportion
+        p1 = baseline_win_rate / 100.0
+        p2 = new_win_rate / 100.0
+        n = points_per_test
+        # Standard error of difference in proportions
+        se = math.sqrt(max(p1*(1-p1)/n,0) + max(p2*(1-p2)/n,0)) * 100.0  # back to percentage scale
+        z = 1.96
+        lower = improvement - z*se
+        upper = improvement + z*se
+        # Match win rate impact approximation (reuse logic from CLI: simulate matches)
+        match_mean = point_to_match_impact(improvement, baseline_point_rate=p1)
+        # Approximate match CI: propagate point improvement CI endpoints
+        match_lower = point_to_match_impact(lower, baseline_point_rate=p1)
+        match_upper = point_to_match_impact(upper, baseline_point_rate=p1)
         return parameter, {
             "win_rate": new_win_rate,
             "improvement": improvement,
+            "improvement_lower": lower,
+            "improvement_upper": upper,
+            "improvement_se": se,
+            "match_improvement": match_mean,
+            "match_lower": match_lower,
+            "match_upper": match_upper,
             "current_value": current_value,
             "change_value": change_value,
             "new_value": new_value
@@ -514,10 +572,25 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
                 # Calculate win rate with parameter improvement
                 new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
                 improvement = new_win_rate - baseline_win_rate
-                
+                # Approximate 95% CI
+                p1 = baseline_win_rate / 100.0
+                p2 = new_win_rate / 100.0
+                se = math.sqrt(max(p1*(1-p1)/points_per_test,0) + max(p2*(1-p2)/points_per_test,0)) * 100.0
+                z = 1.96
+                lower = improvement - z*se
+                upper = improvement + z*se
+                match_mean = point_to_match_impact(improvement, baseline_point_rate=p1)
+                match_lower = point_to_match_impact(lower, baseline_point_rate=p1)
+                match_upper = point_to_match_impact(upper, baseline_point_rate=p1)
                 results["parameter_improvements"][parameter] = {
                     "win_rate": new_win_rate,
                     "improvement": improvement,
+                    "improvement_lower": lower,
+                    "improvement_upper": upper,
+                    "improvement_se": se,
+                    "match_improvement": match_mean,
+                    "match_lower": match_lower,
+                    "match_upper": match_upper,
                     "current_value": current_value,
                     "change_value": change_value,
                     "new_value": new_value

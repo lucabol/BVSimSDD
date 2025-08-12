@@ -172,8 +172,25 @@ async function skillsCommon(opts) {
     if (improve) payload.improve = improve;
     const res = await api('/api/skills', { method: 'POST', body: JSON.stringify(payload) });
     out(res); // keep textual JSON in collapsible output
-    // Statistical analysis multi-run: directly render chart
-    if (res.statistical_analysis) {
+    // Backend currently returns single-run improvements without statistical_analysis / CI.
+    // Synthesize a structure compatible with renderMatchImpactChart using improvement deltas.
+  if (res && res.results && res.results.parameter_improvements) {
+      const improvs = res.results.parameter_improvements;
+      const skills = Object.entries(improvs).map(([parameter, v]) => {
+    // Prefer match-level improvement if available
+    const hasMatch = v.match_improvement !== undefined;
+    const mean = hasMatch ? v.match_improvement : (v.improvement || 0);
+    const lower = hasMatch ? (v.match_lower ?? mean) : (v.improvement_lower !== undefined ? v.improvement_lower : mean);
+    const upper = hasMatch ? (v.match_upper ?? mean) : (v.improvement_upper !== undefined ? v.improvement_upper : mean);
+        const significant = lower > 0 || upper < 0; // CI excludes zero
+        return { parameter, match: { mean, lower, upper }, significant };
+      });
+      // Only attempt to render if we have at least one improvement
+      if (skills.length) {
+        renderMatchImpactChart({ statistical_analysis: true, skills });
+      }
+    } else if (res && res.statistical_analysis) {
+      // Future multi-run pathway
       renderMatchImpactChart(res);
     }
   } catch (e) { out(e.message); }

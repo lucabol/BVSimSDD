@@ -526,4 +526,6 @@ function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
   // Update chart pane title to indicate we are viewing rallies
   const titleEl = document.getElementById('chartPaneTitle'); if (titleEl) titleEl.textContent='Rallies';
   // No need to clearMatchImpactDisplay here; we explicitly cleared chart artifacts above.
+  // Clear any lingering processing status/spinner
+  setMatchImpactStatus('', false);
 }

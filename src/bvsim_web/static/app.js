@@ -428,7 +428,16 @@ function skillsAccurate() { skillsCommon({ accurate: true }); }
 async function compareCommon(opts) {
   startWorking('Comparing teams');
   try {
-    const teams = document.getElementById('compareTeams').value.split(',').map(s => s.trim()).filter(Boolean);
+    const raw = document.getElementById('compareTeams').value;
+    const teams = raw.split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => {
+        const lowered = s.toLowerCase();
+        if (lowered === 'basic') return 'Basic';
+        if (lowered === 'advanced') return 'Advanced';
+        return s; // pass through (file or existing team)
+      });
     const payload = Object.assign({ teams }, opts);
     const res = await api('/api/compare', { method: 'POST', body: JSON.stringify(payload) });
     out(res);

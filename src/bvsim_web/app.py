@@ -228,8 +228,11 @@ def register_routes(app: Flask) -> None:
             elif len(team_names) == 1:
                 # One provided -> load it (or advanced sentinel) + Basic
                 tn = team_names[0]
-                if tn == "__ADVANCED__":
+                lowered = tn.lower()
+                if tn == "__ADVANCED__" or lowered == "advanced":
                     teams.append(Team.from_dict(get_advanced_template("Team A")))
+                elif lowered == "basic":
+                    teams.append(Team.from_dict(get_basic_template("Team A")))
                 else:
                     teams.append(load_team(tn))
                 teams.append(Team.from_dict(get_basic_template("Team B")))
@@ -238,8 +241,18 @@ def register_routes(app: Flask) -> None:
             else:
                 teams = []
                 for i, n in enumerate(team_names):
-                    if n == "__ADVANCED__":
-                        teams.append(Team.from_dict(get_advanced_template(f"Team {chr(65+i)}")))
+                    lowered = n.lower()
+                    if n == "__ADVANCED__" or lowered == "advanced":
+                        # Preserve explicit 'Advanced' keyword label if user typed it
+                        label = "Advanced" if lowered == "advanced" else f"Team {chr(65+i)}"
+                        tdata = get_advanced_template(label)
+                        tdata['name'] = label
+                        teams.append(Team.from_dict(tdata))
+                    elif lowered == "basic":
+                        label = "Basic"
+                        tdata = get_basic_template(label)
+                        tdata['name'] = label
+                        teams.append(Team.from_dict(tdata))
                     else:
                         teams.append(load_team(n))
                 if len(teams) < 2:

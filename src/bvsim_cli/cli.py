@@ -11,6 +11,7 @@ from pathlib import Path
 
 from . import __version__
 from .templates import create_team_template
+from . import templates as templates_module
 from .simulation import run_large_simulation, format_simulation_summary
 from .comparison import compare_teams, format_comparison_text
 from bvsim_core.team import Team
@@ -101,16 +102,26 @@ def cmd_run_simulation(args):
 def cmd_compare_teams(args):
     """Handle compare-teams command"""
     try:
-        # Parse team files
-        team_files = [f.strip() for f in args.teams.split(',')]
+        # Parse team identifiers (file paths or template keywords)
+        team_items = [f.strip() for f in args.teams.split(',')]
         
-        if len(team_files) < 2:
+        if len(team_items) < 2:
             raise ValueError("Need at least 2 teams for comparison")
         
-        # Load teams
+        # Load teams (support special values Basic / Advanced referencing templates)
         teams = []
-        for team_file in team_files:
-            team = Team.from_yaml_file(team_file)
+        for item in team_items:
+            lowered = item.lower()
+            if lowered in ("basic", "advanced"):
+                # Use template to build a team object without writing a file
+                if lowered == "basic":
+                    data = templates_module.get_basic_template(team_name=item.capitalize())
+                else:
+                    data = templates_module.get_advanced_template(team_name=item.capitalize())
+                team = Team.from_dict(data)
+            else:
+                # Treat as file path
+                team = Team.from_yaml_file(item)
             teams.append(team)
         
         # Run comparison

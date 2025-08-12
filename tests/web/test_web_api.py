@@ -80,6 +80,14 @@ def test_compare(client):
     data = rv.get_json()
     assert 'results' in data
 
+def test_compare_basic_advanced_keywords(client):
+    # Use Basic and Advanced keywords directly (case-insensitive) without existing files
+    rv = client.post('/api/compare', json={"teams": ["Basic", "Advanced"], "quick": True})
+    assert rv.status_code == 200, rv.data
+    data = rv.get_json()
+    assert 'results' in data
+    assert set(data['results']['teams']) == {"Basic", "Advanced"}
+
 def test_compare_defaults_when_empty(client):
     rv = client.post('/api/compare', json={})
     assert rv.status_code == 200

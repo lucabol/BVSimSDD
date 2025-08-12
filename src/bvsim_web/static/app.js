@@ -78,6 +78,8 @@ function renderMatchImpactChart(stat) {
     if (!stat || !stat.statistical_analysis) return;
     const canvas = document.getElementById('matchImpactChart');
     if (!canvas) return;
+  const titleEl = document.getElementById('chartPaneTitle');
+  if (titleEl) titleEl.textContent = 'Skills Impact (Match Win Rate Δ)';
 
   // Sort & select top skills by descending mean impact (most positive first)
   const skills = (stat.skills || []).slice().sort((a,b)=> b.match.mean - a.match.mean);
@@ -183,6 +185,8 @@ function renderSimulationChart(sim) {
   if (!sim || !sim.summary) return;
   const canvas = document.getElementById('matchImpactChart');
   if (!canvas) return;
+  const titleEl = document.getElementById('chartPaneTitle');
+  if (titleEl) titleEl.textContent = 'Simulation Win Rates';
   // Destroy only non-skills charts if present
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   if (matchImpactChart) { /* keep skills scatter if user wants? We clear before each new source anyway */ }
@@ -219,6 +223,8 @@ function renderComparisonChart(comp) {
   if (!comp || !comp.results) return;
   const canvas = document.getElementById('matchImpactChart');
   if (!canvas) return;
+  const titleEl = document.getElementById('chartPaneTitle');
+  if (titleEl) titleEl.textContent = 'Team Comparison Rankings';
   if (compareChart) { try { compareChart.destroy(); } catch(_){} compareChart=null; }
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   const rankings = comp.results.rankings || [];

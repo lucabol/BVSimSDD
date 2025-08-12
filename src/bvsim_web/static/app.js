@@ -18,6 +18,7 @@ function clearMatchImpactDisplay() {
     const ctx = canvas.getContext('2d');
     // Clear drawing surface
     ctx.clearRect(0,0,canvas.width || canvas.clientWidth, canvas.height || canvas.clientHeight);
+  canvas.style.display = 'block';
   }
   const legend = document.getElementById('matchImpactLegend');
   if (legend) legend.innerHTML='';
@@ -466,7 +467,7 @@ function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
   if (!container) return;
   // Hide chart-specific artifacts so rallies sit at top cleanly
   const canvas = document.getElementById('matchImpactChart');
-  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width||canvas.clientWidth, canvas.height||canvas.clientHeight); }
+  if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width||canvas.clientWidth, canvas.height||canvas.clientHeight); canvas.style.display='none'; }
   const legendChart = document.getElementById('matchImpactLegend'); if (legendChart) legendChart.innerHTML='';
   const table = document.getElementById('matchImpactTableContainer'); if (table) table.innerHTML='';
   container.innerHTML='';

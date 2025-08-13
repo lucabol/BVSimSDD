@@ -688,13 +688,13 @@ async function scenarioCommon(opts){
     const team = document.getElementById('scenariosTeam').value.trim();
   // Opponent is implicitly the same team (self baseline) per updated requirements
   const opponent = team;
-    const improve = document.getElementById('scenariosImprove').value.trim();
+    // Improve input removed from UI; leave legacy variable undefined (backend ignores for custom files anyway)
     const fileSel = document.getElementById('scenarioFiles');
     let custom = [];
     if(fileSel){ custom = Array.from(fileSel.selectedOptions).map(o=>o.value).filter(Boolean); }
     if(!custom.length){ setScenariosStatus('Select scenario files', false); out('No scenario files selected'); return; }
     const payload = Object.assign({ custom }, opts);
-  if(team) payload.team = team; if(opponent) payload.opponent = opponent; if(improve) payload.improve = improve;
+  if(team) payload.team = team; if(opponent) payload.opponent = opponent; // no improve field for scenarios
     const res = await api('/api/skills', { method:'POST', body: JSON.stringify(payload) });
     out(res);
     if(res && res.statistical_analysis && res.skills){

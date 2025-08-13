@@ -250,8 +250,7 @@ ul.team-list li:hover { background:#f1f5f9; }
         <label for="scenarioFiles">Select Scenario Files (multi)</label>
         <select id="scenarioFiles" multiple size="6" aria-describedby="scenarioFilesHelp" style="min-height:110px;"></select>
   <div id="scenarioFilesHelp" class="note">Hold Ctrl/Command to choose multiple scenario YAML team variant files (root directory *.yaml). Team plays vs itself.</div>
-        <label>Improve (e.g. 5% or 0.05)</label>
-        <input id="scenariosImprove" placeholder="5%" />
+  <!-- Removed redundant Improve field (not used in scenario variant comparisons) -->
         <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="scenariosAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>

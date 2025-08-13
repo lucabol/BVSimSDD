@@ -120,7 +120,7 @@ ul.team-list li:hover { background:#f1f5f9; }
 <body>
 <header>
   <h1><svg class="icon-inline" aria-hidden="true"><use href="#icon-volleyball"/></svg> BVSim Web Interface</h1>
-  <button id="globalToggleControls" class="btn btn--ghost btn--sm" type="button" onclick="toggleAllControls()"><svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Collapse</span></button>
+  <button id="globalToggleControls" class="btn btn--ghost btn--sm" type="button" onclick="toggleControlsVisibility()"><svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Hide Controls</span></button>
 </header>
 <main>
   <!-- SVG ICON SPRITE -->
@@ -294,18 +294,23 @@ ul.team-list li:hover { background:#f1f5f9; }
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/app.js"></script>
 <script>
-let controlsCollapsed = false;
-function toggleAllControls(){
-  controlsCollapsed = !controlsCollapsed;
-  const cards = document.querySelectorAll('#controls section.card');
-  cards.forEach(card => {
-    if(controlsCollapsed) card.classList.add('collapsed'); else card.classList.remove('collapsed');
-  });
+// Toggle full controls panel visibility (instead of collapsing individual cards)
+let controlsHidden = false;
+function toggleControlsVisibility(){
+  controlsHidden = !controlsHidden;
+  const controls = document.getElementById('controls');
+  if(controls){
+    if(controlsHidden){
+      controls.style.display = 'none';
+    } else {
+      controls.style.display = '';
+    }
+  }
   const btn = document.getElementById('globalToggleControls');
-  if(btn) {
-    btn.innerHTML = controlsCollapsed 
-      ? `<svg class="icon" aria-hidden="true"><use href="#icon-expand"/></svg><span class="btn-label">Expand</span>`
-      : `<svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Collapse</span>`;
+  if(btn){
+    btn.innerHTML = controlsHidden
+      ? `<svg class="icon" aria-hidden="true"><use href="#icon-expand"/></svg><span class="btn-label">Show Controls</span>`
+      : `<svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Hide Controls</span>`;
   }
 }
 </script>

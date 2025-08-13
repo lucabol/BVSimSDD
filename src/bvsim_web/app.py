@@ -189,8 +189,13 @@ def register_routes(app: Flask) -> None:
             # Write file
             p.write_text(content)
             # Validate by constructing Team
-            Team.from_yaml_file(str(p))
-            return jsonify({"updated": True, "file": p.name})
+            team_obj = Team.from_yaml_file(str(p))
+            # Probability validation
+            from bvsim_core.validation import validate_team_configuration
+            val_errors = validate_team_configuration(team_obj)
+            if val_errors:
+                return jsonify({"error": "Validation failed", "errors": val_errors, "file": p.name}), 400
+            return jsonify({"updated": True, "file": p.name, "validated": True})
         except Exception as e:
             return error_response(f"Update failed: {e}", 400)
 

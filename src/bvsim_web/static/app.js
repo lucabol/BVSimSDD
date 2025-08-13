@@ -449,8 +449,37 @@ async function saveTeamEdit(){
   const file = ed.dataset.filename;
   if (!file) return setTeamEditStatus('No team loaded', true);
   try {
-    const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method: 'PUT', body: JSON.stringify({ content: ed.value }) });
-    setTeamEditStatus(`Saved ${res.file}`);
+    // Use fetch directly to capture 400 with JSON errors
+    startWorking('Saving team');
+    const response = await fetch(`/api/teams/${encodeURIComponent(file)}`, { method: 'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: ed.value }) });
+    clearWorking();
+    if (!response.ok){
+      let payload;
+      try { payload = await response.json(); } catch { payload = { error: await response.text() }; }
+      if (payload && payload.errors){
+        // Populate detailed errors list
+        const errList = document.getElementById('teamEditErrors');
+        if (errList){
+          errList.innerHTML='';
+          payload.errors.forEach(eMsg => {
+            const li=document.createElement('li');
+            li.textContent=eMsg;
+            errList.appendChild(li);
+          });
+          errList.style.display='block';
+        }
+        // Attempt to extract first probability reference for concise status
+        const first = payload.errors[0];
+        setTeamEditStatus(`${payload.error}: ${first}`, true);
+        out(payload); // full JSON in output pane
+      } else {
+        setTeamEditStatus(payload.error || 'Save failed', true);
+      }
+      return;
+    }
+    const res = await response.json();
+    setTeamEditStatus(`Saved ${res.file} ✓`);
+    const errList = document.getElementById('teamEditErrors'); if (errList){ errList.innerHTML=''; errList.style.display='none'; }
     refreshTeams();
   } catch(e){ setTeamEditStatus(e.message, true); }
 }

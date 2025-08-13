@@ -104,6 +104,17 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
 #ralliesLegend .ok { background:#607d8b; }
 #ralliesLegend .err { background:#b71c1c; }
 #ralliesLegend .ace { background:var(--color-purple); }
+/* Teams pane specific refinements (moved from stray top-of-file block) */
+#teams.card { display:flex; flex-direction:column; }
+#teams.card .section-body { flex:1 1 auto; display:flex; flex-direction:column; }
+ul.team-list { list-style:none; padding:0; margin:4px 0 0; max-height:180px; overflow:auto; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:var(--color-surface); }
+ul.team-list li { display:flex; align-items:center; gap:6px; padding:6px 8px; font-size:.66rem; border-bottom:1px solid #edf1f5; position:relative; }
+ul.team-list li:last-child { border-bottom:none; }
+ul.team-list li .team-name { flex:1 1 auto; display:flex; align-items:center; gap:6px; font-weight:600; cursor:pointer; color:var(--color-text); }
+ul.team-list li .team-name svg { width:14px; height:14px; color:var(--color-brand-accent); flex:0 0 auto; }
+ul.team-list li .actions { display:flex; gap:4px; }
+ul.team-list li:hover { background:#f1f5f9; }
+#teams { min-height:300px; }
 </style>
 </head>
 <body>

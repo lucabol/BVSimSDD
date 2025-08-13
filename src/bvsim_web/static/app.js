@@ -347,8 +347,13 @@ async function refreshTeams() {
       const li=document.createElement('li');
       const fname = t.file || '';
       const safeFile = fname.replace(/"/g,'');
-      li.innerHTML = `<span style="flex:1;cursor:pointer;" onclick="openTeam('${safeFile}')">${t.name || '(unnamed)'} <small>${fname}</small></span>
-        <span style="display:flex; gap:4px;">
+      const teamDisplayName = t.name || '(unnamed)';
+      li.innerHTML = `
+        <span class=\"team-name\" onclick=\"openTeam('${safeFile}')\">
+          <svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-volleyball'/></svg>
+          <span>${teamDisplayName}</span>
+        </span>
+        <span class=\"actions\">
           <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
           <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team\" onclick=\"event.stopPropagation(); deleteTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
           <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download team\" onclick=\"event.stopPropagation(); downloadTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>

@@ -131,3 +131,14 @@ This MVP keeps footprint small while exposing core simulator capabilities.
 ### Added: JSON Syntax Highlighting
 The JSON Output panel now uses a lightweight custom tokenizer (no external JS dependency) for syntax coloring (keys, strings, numbers, booleans, null). This avoids layout glitches previously seen with the CDN highlight library. To adjust colors, edit the `.j-key`, `.j-string`, `.j-number`, `.j-bool`, and `.j-null` CSS rules in `index.html`.
 
+### Added: YAML Team Editor Highlighting (NEW)
+The Team editing modal now features YAML syntax highlighting, line numbers, and basic editing keybindings powered by a lightweight CodeMirror 6 setup (loaded via CDN). The original `<textarea>` remains in the DOM (hidden) for graceful degradation; if scripts fail to load, plain text editing still works.
+
+Implementation details:
+- Module imports for `@codemirror/state`, `@codemirror/view`, `@codemirror/lang-yaml`, and `@codemirror/commands` included inline in `static/index.html`.
+- Editor initialized lazily after DOMContentLoaded; content syncs on load, save, and format actions.
+- Save action always pulls current document text from the editor instance before sending to the `/api/teams/<file>` endpoint.
+- Formatting currently trims trailing whitespace only (future enhancement: integrate js-yaml for structural formatting).
+
+To adjust appearance: edit the `.cm-editor`, `.cm-gutters`, or line number color rules in `index.html`.
+

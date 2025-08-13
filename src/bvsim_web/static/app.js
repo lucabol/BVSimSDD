@@ -251,7 +251,7 @@ function renderSimulationChart(sim) {
   if (!sim || !sim.summary) return;
   const canvas = document.getElementById('matchImpactChart');
   if (!canvas) return;
-  // Chart.js internal title kept concise; pane title above holds detailed context
+  // Chart.js internal title kept concise; pane title above holds full context
   // Destroy only non-skills charts if present
   if (simulateChart) { try { simulateChart.destroy(); } catch(_){} simulateChart=null; }
   if (matchImpactChart) { /* keep skills scatter if user wants? We clear before each new source anyway */ }
@@ -514,10 +514,11 @@ async function openTeam(file){
   if(!file) return;
   try {
     const data = await api(`/api/teams/${encodeURIComponent(file)}`);
-    const ed = document.getElementById('teamEditor');
-    if(!ed) return;
-    ed.value = data.content || '';
-    ed.dataset.filename = data.file;
+    const ta = document.getElementById('teamEditor');
+    if(ta) { ta.value = data.content || ''; ta.dataset.filename = data.file; }
+    if(window.teamYamlEditor && window.teamYamlEditor.session){
+      window.teamYamlEditor.session.setValue(data.content || '');
+    }
     const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = data.file;
     setTeamEditStatus(`Loaded ${data.file}`);
     showTeamModal();
@@ -525,70 +526,36 @@ async function openTeam(file){
 }
 
 async function saveTeamEdit(){
-  const ed = document.getElementById('teamEditor');
-  const file = ed.dataset.filename;
-  if (!file) return setTeamEditStatus('No team loaded', true);
+  const ta = document.getElementById('teamEditor');
+  const file = ta && ta.dataset.filename;
+  if(!file) return setTeamEditStatus('No team loaded', true);
+  if(window.teamYamlEditor && window.teamYamlEditor.session){ ta.value = window.teamYamlEditor.session.getValue(); }
   try {
-    // Use fetch directly to capture 400 with JSON errors
     startWorking('Saving team');
-    const response = await fetch(`/api/teams/${encodeURIComponent(file)}`, { method: 'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: ed.value }) });
+    const response = await fetch(`/api/teams/${encodeURIComponent(file)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: ta.value }) });
     clearWorking();
-    if (!response.ok){
-      let payload;
-      try { payload = await response.json(); } catch { payload = { error: await response.text() }; }
-      if (payload && payload.errors){
-        // Populate detailed errors list
-        const errList = document.getElementById('teamEditErrors');
-        if (errList){
-          errList.innerHTML='';
-          payload.errors.forEach(eMsg => {
-            const li=document.createElement('li');
-            li.textContent=eMsg;
-            errList.appendChild(li);
-          });
-          errList.style.display='block';
-        }
-        // Attempt to extract first probability reference for concise status
-        const first = payload.errors[0];
-        setTeamEditStatus(`${payload.error}: ${first}`, true);
-        out(payload); // full JSON in output pane
-      } else {
-        setTeamEditStatus(payload.error || 'Save failed', true);
-      }
+    if(!response.ok){
+      let payload; try{ payload = await response.json(); }catch{ payload={ error: await response.text() }; }
+      if(payload && payload.errors){
+        const errList=document.getElementById('teamEditErrors'); if(errList){ errList.innerHTML=''; payload.errors.forEach(m=>{ const li=document.createElement('li'); li.textContent=m; errList.appendChild(li); }); errList.style.display='block'; }
+        setTeamEditStatus(`${payload.error}: ${payload.errors[0]}`, true); out(payload);
+      } else { setTeamEditStatus(payload.error||'Save failed', true); }
       return;
     }
     const res = await response.json();
     setTeamEditStatus(`Saved ${res.file} ✓`);
-    const errList = document.getElementById('teamEditErrors'); if (errList){ errList.innerHTML=''; errList.style.display='none'; }
+    const errList=document.getElementById('teamEditErrors'); if(errList){ errList.innerHTML=''; errList.style.display='none'; }
     refreshTeams();
   } catch(e){ setTeamEditStatus(e.message, true); }
 }
-
-async function deleteTeam(file){
-  if(!file) return;
-  if(!confirm(`Delete ${file}?`)) return;
-  try {
-    const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method: 'DELETE' });
-    setTeamEditStatus(`Deleted ${res.file}`);
-    const ed = document.getElementById('teamEditor');
-    if(ed && ed.dataset.filename === file){ ed.value=''; delete ed.dataset.filename; }
-    refreshTeams();
-  } catch(e){ setTeamEditStatus(e.message, true); }
-}
-
-function downloadTeam(file){
-  if(!file) return;
-  window.open(`/api/teams/${encodeURIComponent(file)}/download`, '_blank');
-}
-
-function downloadCurrentTeam(){ const ed=document.getElementById('teamEditor'); if(!ed || !ed.dataset.filename) return setTeamEditStatus('No team loaded', true); downloadTeam(ed.dataset.filename); }
-
-function setTeamEditStatus(msg,isError){ const el=document.getElementById('teamEditStatus'); if(!el) return; el.textContent=msg; el.style.color=isError?'#b71c1c':'#4a5b6d'; }
 
 function formatTeamYaml(){
-  const ed=document.getElementById('teamEditor'); if(!ed || !ed.value.trim()) return;
-  // Placeholder: could integrate js-yaml client-side; for now just trims trailing spaces
-  ed.value = ed.value.split('\n').map(l=>l.replace(/\s+$/,'')).join('\n');
+  const ta=document.getElementById('teamEditor'); if(!ta) return;
+  let txt = window.teamYamlEditor && window.teamYamlEditor.session ? window.teamYamlEditor.session.getValue() : ta.value;
+  if(!txt.trim()) return;
+  const trimmed = txt.split('\n').map(l=>l.replace(/\s+$/,'')).join('\n');
+  if(window.teamYamlEditor && window.teamYamlEditor.session){ window.teamYamlEditor.session.setValue(trimmed); }
+  ta.value = trimmed;
   setTeamEditStatus('Whitespace trimmed');
 }
 
@@ -630,15 +597,13 @@ async function skillsCommon(opts) {
     // Synthesize a structure compatible with renderMatchImpactChart using improvement deltas.
   if (res && res.results && res.results.parameter_improvements) {
       lastSkillsData = res; // store
-      // Dynamic pane title with baseline & change
       const paneTitle = document.getElementById('chartPaneTitle');
       if (paneTitle) {
         const base = res.results.baseline_win_rate; const changeVal = res.results.change_value; const pts = res.parameters?.points || res.results.points_per_test; const tTeam = res.teams?.team || 'Team A'; const tOpp = res.teams?.opponent || 'Team B';
         paneTitle.textContent = `Skills Impact: ${tTeam} vs ${tOpp} (baseline ${base?.toFixed?base.toFixed(1):base}%, Δ each ${fmtChangeVal(changeVal)}, ${fmtInt(pts)} pts/test)`;
       }
-      // Build skills array for generic renderer
-      const improvs = res.results.parameter_improvements;
-      const skills = Object.entries(improvs).map(([parameter, v]) => {
+      const improvsData = res.results.parameter_improvements;
+      const skillsArr = Object.entries(improvsData).map(([parameter, v]) => {
         const mean = v.match_improvement !== undefined ? v.match_improvement : (v.improvement || 0);
         const lower = v.match_lower ?? v.improvement_lower ?? mean;
         const upper = v.match_upper ?? v.improvement_upper ?? mean;
@@ -648,14 +613,11 @@ async function skillsCommon(opts) {
         const pUpper = v.improvement_upper !== undefined ? v.improvement_upper : pMean;
         return { parameter, point: { mean: pMean, lower: pLower, upper: pUpper }, match: { mean, lower, upper }, significant };
       });
-      if (skills.length) {
-        renderMatchImpactChart({ statistical_analysis: true, skills });
-        // After rendering restore dynamic pane title (renderMatchImpactChart doesn't override now)
+      if (skillsArr.length) {
+        renderMatchImpactChart({ statistical_analysis: true, skills: skillsArr });
       }
-      // Legend supplementary note
       setTimeout(()=>{ const legendEl=document.getElementById('matchImpactLegend'); if(legendEl){ const base = res.results.baseline_win_rate; const changeVal = res.results.change_value; const pts = res.parameters?.points || res.results.points_per_test; const note=document.createElement('div'); note.style.fontSize='.6rem'; note.textContent=`Baseline win rate ${base?.toFixed?base.toFixed(2):base}%. Each parameter increased by ${fmtChangeVal(changeVal)} (additive). ${fmtInt(pts)} pts per test.`; legendEl.appendChild(note);} }, 60);
     } else if (res && res.statistical_analysis) {
-      // Future multi-run pathway
       renderMatchImpactChart(res);
     }
   setSkillsStatus('Skills analysis complete.', false);
@@ -828,3 +790,5 @@ function renderRallies(rallies, { teamA='A', teamB='B' }={}) {
   // Clear any lingering processing status/spinner
   setMatchImpactStatus('', false);
 }
+
+function setTeamEditStatus(msg,isError){ const el=document.getElementById('teamEditStatus'); if(!el) return; el.textContent=msg; el.style.color=isError?'#b71c1c':'#4a5b6d'; }

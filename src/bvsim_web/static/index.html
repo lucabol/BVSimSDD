@@ -128,29 +128,39 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
       <div class="section-body">
         <div class="flex-row">
           <div>
-            <label>Create Name</label>
-            <input id="newTeamName" placeholder="Name" />
+            <label>New Team Name</label>
+            <input id="newTeamName" placeholder="e.g. Elite Spikers" />
           </div>
           <div>
-            <label>Template</label>
-            <select id="newTeamTemplate">
-              <option value="basic">Basic</option>
-              <option value="advanced">Advanced</option>
+            <label>Base From</label>
+            <select id="newTeamBase">
+              <option value="__BASIC__">Basic Template</option>
+              <option value="__ADVANCED__">Advanced Template</option>
             </select>
           </div>
         </div>
         <div class="flex-row">
-          <button onclick="createTeam()">Create</button>
+          <button onclick="createTeamEnhanced()">Add Team</button>
           <div style="display:flex; flex-direction:column; gap:4px;">
             <label style="margin:0">Upload</label>
             <input type="file" id="uploadTeamFile" accept=".yaml,.yml" style="padding:3px;" />
           </div>
           <button class="secondary" onclick="uploadTeam()">Upload</button>
         </div>
-        <label style="margin-top:4px">Available Teams</label>
+        <label style="margin-top:4px">Teams</label>
         <ul class="team-list" id="teamList"></ul>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
           <button class="secondary" onclick="refreshTeams()">Refresh</button>
+          <button class="secondary" onclick="clearEditor()">Clear Editor</button>
+        </div>
+        <div style="margin-top:8px; display:grid; gap:4px;">
+          <label>Editor (YAML)</label>
+          <textarea id="teamEditor" placeholder="Select a team to view or edit" style="min-height:140px; resize:vertical;"></textarea>
+          <div class="flex-row">
+            <button onclick="saveTeamEdit()">Save</button>
+            <button class="secondary" onclick="downloadCurrentTeam()">Download</button>
+          </div>
+          <div class="status" id="teamEditStatus"></div>
         </div>
       </div>
     </section>

@@ -345,7 +345,14 @@ async function refreshTeams() {
     list.innerHTML='';
     data.teams.forEach(t=>{
       const li=document.createElement('li');
-      li.innerHTML = `<span>${t.name || '(unnamed)'} <small>${t.file || ''}</small></span>`;
+      const fname = t.file || '';
+      const safeFile = fname.replace(/"/g,'');
+      li.innerHTML = `<span style="flex:1;cursor:pointer;" onclick="openTeam('${safeFile}')">${t.name || '(unnamed)'} <small>${fname}</small></span>`+
+        `<span style="display:flex; gap:4px;">
+          <button class="small-inline" style="background:#546e7a;" onclick="event.stopPropagation(); openTeam('${safeFile}')">Edit</button>`+
+          `<button class="small-inline" style="background:#b71c1c;" onclick="event.stopPropagation(); deleteTeam('${safeFile}')">Del</button>`+
+          `<button class="small-inline" style="background:#1976d2;" onclick="event.stopPropagation(); downloadTeam('${safeFile}')">↓</button>`+
+        `</span>`;
       list.appendChild(li);
     });
     // Populate selects with Basic, Advanced, then available teams
@@ -365,6 +372,19 @@ async function refreshTeams() {
         if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value=prev; else sel.value='';
       });
     }
+    // Populate base select with current teams
+    const baseSel = document.getElementById('newTeamBase');
+    if (baseSel) {
+      const preserve = baseSel.value;
+      baseSel.innerHTML='';
+      const optB=document.createElement('option'); optB.value='__BASIC__'; optB.textContent='Basic Template'; baseSel.appendChild(optB);
+      const optA=document.createElement('option'); optA.value='__ADVANCED__'; optA.textContent='Advanced Template'; baseSel.appendChild(optA);
+      if (data.teams.length) {
+        const sep=document.createElement('option'); sep.disabled=true; sep.textContent='── Existing Teams ──'; baseSel.appendChild(sep);
+      }
+      data.teams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; baseSel.appendChild(o); });
+      if (preserve && Array.from(baseSel.options).some(o=>o.value===preserve)) baseSel.value=preserve;
+    }
   } catch(e){ out(e.message); }
 }
 
@@ -379,6 +399,19 @@ async function createTeam() {
   } catch (e) { out(e.message); }
 }
 
+// New enhanced create using base source
+async function createTeamEnhanced() {
+  const name = document.getElementById('newTeamName').value.trim();
+  const base = document.getElementById('newTeamBase').value;
+  if (!name) return out('Enter a team name');
+  try {
+    const res = await api('/api/teams', { method: 'POST', body: JSON.stringify({ name, base }) });
+    out(res);
+    document.getElementById('newTeamName').value='';
+    refreshTeams();
+  } catch(e){ out(e.message); }
+}
+
 async function uploadTeam() {
   startWorking('Uploading team');
   const input = document.getElementById('uploadTeamFile');
@@ -391,6 +424,66 @@ async function uploadTeam() {
     out(await res.json());
     refreshTeams();
   } catch (e) { out(e.message); }
+}
+
+// Open a team into editor
+async function openTeam(file) {
+  if (!file) return;
+  try {
+    const data = await api(`/api/teams/${encodeURIComponent(file)}`);
+    const ed = document.getElementById('teamEditor');
+    ed.value = data.content || '';
+    ed.dataset.filename = data.file;
+    setTeamEditStatus(`Loaded ${data.file}`);
+  } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+function clearEditor(){
+  const ed = document.getElementById('teamEditor');
+  ed.value='';
+  delete ed.dataset.filename;
+  setTeamEditStatus('Editor cleared');
+}
+
+async function saveTeamEdit(){
+  const ed = document.getElementById('teamEditor');
+  const file = ed.dataset.filename;
+  if (!file) return setTeamEditStatus('No team loaded', true);
+  try {
+    const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method: 'PUT', body: JSON.stringify({ content: ed.value }) });
+    setTeamEditStatus(`Saved ${res.file}`);
+    refreshTeams();
+  } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+async function deleteTeam(file){
+  if (!file) return;
+  if (!confirm(`Delete ${file}?`)) return;
+  try {
+    const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method: 'DELETE' });
+    setTeamEditStatus(`Deleted ${res.file}`);
+    const ed = document.getElementById('teamEditor');
+    if (ed.dataset.filename === file) clearEditor();
+    refreshTeams();
+  } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+function downloadTeam(file){
+  if(!file) return;
+  window.open(`/api/teams/${encodeURIComponent(file)}/download`, '_blank');
+}
+
+function downloadCurrentTeam(){
+  const ed = document.getElementById('teamEditor');
+  if(!ed.dataset.filename) return setTeamEditStatus('No team loaded', true);
+  downloadTeam(ed.dataset.filename);
+}
+
+function setTeamEditStatus(msg, isError){
+  const el = document.getElementById('teamEditStatus');
+  if(!el) return;
+  el.textContent = msg;
+  el.style.color = isError ? '#b71c1c' : '#4a5b6d';
 }
 
 async function simulateCommon(opts) {

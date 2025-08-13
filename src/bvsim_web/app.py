@@ -97,15 +97,41 @@ def register_routes(app: Flask) -> None:
     @app.post("/api/teams")
     def api_create_team():
         data = request.get_json(force=True, silent=True) or {}
-        name = data.get("name")
-        template = data.get("template", "basic")
+        name = (data.get("name") or "").strip()
+        base = (data.get("base") or "").strip()  # can be '__BASIC__', '__ADVANCED__', or existing team filename/name
+        template = data.get("template")  # legacy param (basic/advanced) still supported
+        overwrite = bool(data.get("overwrite"))
         if not name:
             return error_response("Missing 'name'")
+        # normalized output filename (keep existing convention)
         output_file = f"team_{name.lower().replace(' ', '_')}.yaml"
+        out_path = Path(output_file)
+        if out_path.exists() and not overwrite:
+            return error_response("File already exists (set overwrite=true to replace)", 409)
         try:
-            template_type = "advanced" if template == "advanced" else "basic"
-            create_team_template(team_name=name, template_type=template_type, output_file=output_file, interactive=False)
-            return jsonify({"created": True, "file": output_file})
+            # Determine source data
+            if base:
+                if base == '__BASIC__':
+                    team_data = get_basic_template(name)
+                elif base == '__ADVANCED__':
+                    team_data = get_advanced_template(name)
+                else:
+                    # treat as existing team file or name; load then substitute new name
+                    src_team = load_team(base)
+                    team_data = src_team.to_dict()
+                    team_data['name'] = name
+            else:
+                # fallback to legacy template param
+                template_type = "advanced" if template == "advanced" else "basic"
+                create_team_template(team_name=name, template_type=template_type, output_file=output_file, interactive=False)
+                return jsonify({"created": True, "file": output_file, "source": template_type})
+            # Write YAML manually (mirror create_team_template style) since we may have custom team_data
+            import yaml
+            with open(out_path, 'w') as f:
+                yaml.dump(team_data, f, default_flow_style=False, indent=2, sort_keys=False)
+            return jsonify({"created": True, "file": output_file, "source": base or template or 'basic'})
+        except FileNotFoundError as e:
+            return error_response(str(e), 404)
         except Exception as e:
             return error_response(str(e), 500)
 
@@ -116,17 +142,70 @@ def register_routes(app: Flask) -> None:
         f = request.files['file']
         if f.filename == '':
             return error_response("Empty filename")
-        path = Path(f.filename)
+        # Sanitize filename to prevent directory traversal
+        path = Path(f.filename).name
+        path = Path(path)
         if path.suffix.lower() not in ('.yaml', '.yml'):
             return error_response("Only .yaml/.yml allowed")
         content = f.read()
-        path.write_bytes(content)
+        path.write_bytes(content)  # overwrite allowed
         # validate
         try:
             Team.from_yaml_file(str(path))
             return jsonify({"uploaded": True, "file": path.name})
         except Exception as e:
             return error_response(f"Invalid team file: {e}", 400)
+
+    @app.get("/api/teams/<team_file>")
+    def api_get_team(team_file: str):
+        # Return raw YAML content and parsed name
+        p = Path(team_file)
+        if not p.suffix:
+            p = p.with_suffix('.yaml')
+        if not p.exists():
+            return error_response("Team file not found", 404)
+        try:
+            txt = p.read_text()
+            t = Team.from_yaml_file(str(p))
+            return jsonify({"file": p.name, "name": t.name, "content": txt})
+        except Exception as e:
+            return error_response(f"Failed to load team: {e}", 500)
+
+    @app.put("/api/teams/<team_file>")
+    def api_update_team(team_file: str):
+        p = Path(team_file)
+        if not p.suffix:
+            p = p.with_suffix('.yaml')
+        data = request.get_json(force=True, silent=True) or {}
+        content = data.get('content')
+        if content is None:
+            return error_response("Missing 'content'")
+        # Basic safety: must be YAML and contain a name field
+        try:
+            import yaml
+            parsed = yaml.safe_load(content)
+            if not isinstance(parsed, dict) or 'name' not in parsed:
+                return error_response("YAML must define a 'name' field")
+            # Write file
+            p.write_text(content)
+            # Validate by constructing Team
+            Team.from_yaml_file(str(p))
+            return jsonify({"updated": True, "file": p.name})
+        except Exception as e:
+            return error_response(f"Update failed: {e}", 400)
+
+    @app.delete("/api/teams/<team_file>")
+    def api_delete_team(team_file: str):
+        p = Path(team_file)
+        if not p.suffix:
+            p = p.with_suffix('.yaml')
+        if not p.exists():
+            return error_response("Team file not found", 404)
+        try:
+            p.unlink()
+            return jsonify({"deleted": True, "file": p.name})
+        except Exception as e:
+            return error_response(f"Delete failed: {e}", 500)
 
     @app.get("/api/teams/<name>/download")
     def api_download_team(name: str):

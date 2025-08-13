@@ -1,4 +1,5 @@
 let spinnerTimer = null;
+let workingActive = false; // tracks if global working spinner loop is running
 let matchImpactChart = null;
 let simulateChart = null; // bar chart for last simulation
 let compareChart = null;  // bar chart for last comparison average win rates
@@ -47,6 +48,18 @@ function setSkillsStatus(msg, spinning=true){
   el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
 }
 
+// New per-section status helpers for Simulate & Compare (parity with Skills)
+function setSimulateStatus(msg, spinning=true){
+  const el = document.getElementById('simulateStatus');
+  if(!el) return; if(!msg){ el.textContent=''; return; }
+  el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
+}
+function setCompareStatus(msg, spinning=true){
+  const el = document.getElementById('compareStatus');
+  if(!el) return; if(!msg){ el.textContent=''; return; }
+  el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
+}
+
 // toggleOutput removed (output always visible now)
 function startWorking(msg = 'Working') {
   const el = document.getElementById('output');
@@ -60,12 +73,14 @@ function startWorking(msg = 'Working') {
     dots = (dots + 1) % 4;
     el.textContent = msg + '.'.repeat(dots);
   }, 400);
+  workingActive = true;
 }
 function clearWorking() {
   if (spinnerTimer) {
     clearInterval(spinnerTimer);
     spinnerTimer = null;
   }
+  workingActive = false;
 }
 function copyOutput(){
   const pre=document.getElementById('output');
@@ -369,7 +384,10 @@ function renderComparisonChart(comp) {
   }
 }
 async function api(path, options={}) {
-  startWorking();
+  // Support internal flag to suppress automatic startWorking (e.g., passive refresh on load)
+  if (!options._noProgress && !workingActive) {
+    startWorking();
+  }
   const res = await fetch(path, Object.assign({headers: { 'Content-Type': 'application/json' }}, options));
   if (!res.ok) {
     let txt = await res.text();
@@ -383,7 +401,8 @@ async function api(path, options={}) {
 
 async function refreshTeams() {
   try {
-    const data = await api('/api/teams');
+  // Passive refresh (e.g., on initial load) should not trigger spinner; provide _noProgress flag
+  const data = await api('/api/teams', { _noProgress: true });
     const list = document.getElementById('teamList');
     if (!list) return; // defensive
     list.innerHTML='';
@@ -575,6 +594,7 @@ function formatTeamYaml(){
 
 async function simulateCommon(opts) {
   startWorking('Simulating');
+  setSimulateStatus('Running simulation...', true);
   try {
     const team_a = document.getElementById('simTeamA').value.trim();
     const team_b = document.getElementById('simTeamB').value.trim();
@@ -586,6 +606,7 @@ async function simulateCommon(opts) {
     out(res);
   clearMatchImpactDisplay();
   renderSimulationChart(res);
+  setSimulateStatus('Simulation complete.', false);
   } catch (e) { out(e.message); }
 }
 function simulate() { simulateCommon({}); }
@@ -646,6 +667,7 @@ function skillsAccurate() { skillsCommon({ accurate: true }); }
 
 async function compareCommon(opts) {
   startWorking('Comparing teams');
+  setCompareStatus('Running comparison...', true);
   try {
     const raw = document.getElementById('compareTeams').value;
     const teams = raw.split(',')
@@ -662,6 +684,7 @@ async function compareCommon(opts) {
     out(res);
   clearMatchImpactDisplay();
   renderComparisonChart(res);
+  setCompareStatus('Comparison complete.', false);
   } catch (e) { out(e.message); }
 }
 function compareTeamsRun() { compareCommon({}); }

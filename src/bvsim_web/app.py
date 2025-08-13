@@ -214,12 +214,24 @@ def register_routes(app: Flask) -> None:
 
     @app.get("/api/teams/<name>/download")
     def api_download_team(name: str):
-        path = Path(name)
-        if not path.suffix:
-            path = path.with_suffix('.yaml')
-        if not path.exists():
-            return error_response("Team file not found", 404)
-        return send_file(str(path), as_attachment=True, download_name=path.name)
+        # Sanitize just filename
+        safe_name = Path(name).name
+        path_candidate = Path(safe_name)
+        candidates = []
+        # If user omitted suffix, consider .yaml
+        if not path_candidate.suffix:
+            path_candidate = path_candidate.with_suffix('.yaml')
+        # Search current working directory, parent, and tests/data/teams like load_team
+        search_dirs = [Path.cwd(), Path.cwd().parent]
+        tdir = Path.cwd() / 'tests' / 'data' / 'teams'
+        if tdir.exists():
+            search_dirs.append(tdir)
+        for d in search_dirs:
+            cand = d / path_candidate.name
+            candidates.append(cand)
+            if cand.exists():
+                return send_file(str(cand), as_attachment=True, download_name=cand.name)
+        return error_response("Team file not found", 404)
 
     @app.post("/api/simulate")
     def api_simulate():

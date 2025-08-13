@@ -347,12 +347,12 @@ async function refreshTeams() {
       const li=document.createElement('li');
       const fname = t.file || '';
       const safeFile = fname.replace(/"/g,'');
-      li.innerHTML = `<span style="flex:1;cursor:pointer;" onclick="openTeam('${safeFile}')">${t.name || '(unnamed)'} <small>${fname}</small></span>`+
-        `<span style="display:flex; gap:4px;">
-          <button class="small-inline" style="background:#546e7a;" onclick="event.stopPropagation(); openTeam('${safeFile}')">Edit</button>`+
-          `<button class="small-inline" style="background:#b71c1c;" onclick="event.stopPropagation(); deleteTeam('${safeFile}')">Del</button>`+
-          `<button class="small-inline" style="background:#1976d2;" onclick="event.stopPropagation(); downloadTeam('${safeFile}')">↓</button>`+
-        `</span>`;
+      li.innerHTML = `<span style="flex:1;cursor:pointer;" onclick="openTeam('${safeFile}')">${t.name || '(unnamed)'} <small>${fname}</small></span>
+        <span style="display:flex; gap:4px;">
+          <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+          <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team\" onclick=\"event.stopPropagation(); deleteTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
+          <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download team\" onclick=\"event.stopPropagation(); downloadTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
+        </span>`;
       list.appendChild(li);
     });
     // Populate selects with Basic, Advanced, then available teams

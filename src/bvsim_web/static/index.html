@@ -34,7 +34,10 @@ main { padding:14px 16px 32px; }
 /* Make all control cards equal height using flex */
 #controls > section.card { display:flex; flex-direction:column; }
 #controls > section.card header.section-head { flex:0 0 auto; }
-#controls > section.card .section-body { flex:1 1 auto; display:grid; gap:6px; align-content:start; align-items:start; }
+#controls > section.card .section-body { flex:1 1 auto; display:flex; flex-direction:column; gap:6px; align-content:start; align-items:stretch; }
+#controls > section.card .actions-bottom { margin-top:auto; display:flex; flex-direction:column; gap:4px; }
+#controls > section.card .actions-bottom .btn-group { flex-wrap:wrap; }
+#controls > section.card .actions-bottom .status { min-height:14px; }
 section.card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:0; box-shadow:var(--shadow-sm); position:relative; overflow:hidden; }
 section.card:hover { box-shadow:var(--shadow-md); }
 section.card header.section-head { margin:0; padding:6px 10px 6px 12px; display:flex; align-items:center; justify-content:flex-start; background:linear-gradient(90deg,var(--color-brand) 0%,var(--color-brand-accent-grad) 100%); color:#fff; }
@@ -204,12 +207,14 @@ ul.team-list li:hover { background:#f1f5f9; }
             <input id="simPoints" type="number" placeholder="default" />
           </div>
         </div>
+        <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="simulate()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-play"/></svg><span>Run</span></button>
           <button onclick="simulateQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>
           <button onclick="simulateAccurate()" class="btn btn--purple" title="Accurate"><svg class="icon" aria-hidden="true"><use href="#icon-target"/></svg><span>Accurate</span></button>
         </div>
   <div id="simulateStatus" class="status"></div>
+        </div>
       </div>
     </section>
 
@@ -224,12 +229,14 @@ ul.team-list li:hover { background:#f1f5f9; }
   <select id="skillsOpponent"></select>
         <label>Improve (e.g. 5% or 0.05)</label>
         <input id="skillsImprove" placeholder="5%" />
+        <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="skillsAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>
           <button onclick="skillsQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>
           <button onclick="skillsAccurate()" class="btn btn--purple" title="Accurate"><svg class="icon" aria-hidden="true"><use href="#icon-target"/></svg><span>Accurate</span></button>
         </div>
         <div id="skillsStatus" class="status"></div>
+        </div>
       </div>
     </section>
 
@@ -245,12 +252,14 @@ ul.team-list li:hover { background:#f1f5f9; }
   <div id="scenarioFilesHelp" class="note">Hold Ctrl/Command to choose multiple scenario YAML team variant files (root directory *.yaml). Team plays vs itself.</div>
         <label>Improve (e.g. 5% or 0.05)</label>
         <input id="scenariosImprove" placeholder="5%" />
+        <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="scenariosAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>
           <button onclick="scenariosQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>
           <button onclick="scenariosAccurate()" class="btn btn--purple" title="Accurate"><svg class="icon" aria-hidden="true"><use href="#icon-target"/></svg><span>Accurate</span></button>
         </div>
         <div id="scenariosStatus" class="status"></div>
+        </div>
       </div>
     </section>
 
@@ -262,12 +271,14 @@ ul.team-list li:hover { background:#f1f5f9; }
   <label for="compareTeams">Select Teams (multi)</label>
   <select id="compareTeams" multiple size="6" aria-describedby="compareTeamsHelp" style="min-height:110px;"></select>
   <div id="compareTeamsHelp" class="note">Hold Ctrl/Command (desktop) to select multiple. Include 2+ teams. Basic/Advanced templates available.</div>
+        <div class="actions-bottom">
         <div class="btn-group">
-          <button onclick="compareTeamsRun()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-compare"/></svg><span>Round Robin</span></button>
+          <button onclick="compareTeamsRun()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-compare"/></svg><span>Analyze</span></button>
           <button onclick="compareQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>
           <button onclick="compareAccurate()" class="btn btn--purple" title="Accurate"><svg class="icon" aria-hidden="true"><use href="#icon-target"/></svg><span>Accurate</span></button>
         </div>
   <div id="compareStatus" class="status"></div>
+        </div>
       </div>
     </section>
 
@@ -280,9 +291,13 @@ ul.team-list li:hover { background:#f1f5f9; }
           <div><label>Team A</label><select id="exTeamA"></select></div>
           <div><label>Team B</label><select id="exTeamB"></select></div>
           <div><label>Count</label><input id="exCount" type="number" value="5" /></div>
-          <div style="display:flex;align-items:flex-end"><button onclick="runExamples()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-rally"/></svg><span>Generate</span></button></div>
         </div>
-        <div class="note">Generates short rally descriptions for quick inspection.</div>
+        <div class="actions-bottom">
+          <div class="btn-group">
+            <button onclick="runExamples()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-rally"/></svg><span>Generate</span></button>
+          </div>
+          <div class="note">Generates short rally descriptions for quick inspection.</div>
+        </div>
       </div>
     </section>
   </div>

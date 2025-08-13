@@ -549,6 +549,19 @@ async function saveTeamEdit(){
   } catch(e){ setTeamEditStatus(e.message, true); }
 }
 
+async function deleteTeam(file){
+  if(!file) return; if(!confirm(`Delete ${file}?`)) return;
+  try {
+    const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method:'DELETE' });
+    setTeamEditStatus(`Deleted ${res.file}`);
+    const ta=document.getElementById('teamEditor');
+    if(ta && ta.dataset.filename === file){ ta.value=''; delete ta.dataset.filename; if(window.teamYamlEditor && window.teamYamlEditor.session){ window.teamYamlEditor.session.setValue(''); } }
+    refreshTeams();
+  } catch(e){ setTeamEditStatus(e.message, true); }
+}
+function downloadTeam(file){ if(!file) return; window.open(`/api/teams/${encodeURIComponent(file)}/download`, '_blank'); }
+function downloadCurrentTeam(){ const ta=document.getElementById('teamEditor'); if(!ta || !ta.dataset.filename) return setTeamEditStatus('No team loaded', true); downloadTeam(ta.dataset.filename); }
+
 function formatTeamYaml(){
   const ta=document.getElementById('teamEditor'); if(!ta) return;
   let txt = window.teamYamlEditor && window.teamYamlEditor.session ? window.teamYamlEditor.session.getValue() : ta.value;

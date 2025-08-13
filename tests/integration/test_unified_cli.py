@@ -126,32 +126,49 @@ def test_skills_with_team():
 
 
 def test_skills_custom_multi_file():
-    """Test skills command with multiple custom delta files"""
+    """Test skills command with multiple custom team variant files"""
     with tempfile.TemporaryDirectory() as tmpdir:
         original_dir = os.getcwd()
         try:
             os.chdir(tmpdir)
-            
-            # Create test delta files
-            delta1_content = """# Test delta 1
-serve_probabilities.ace: 0.05
-attack_probabilities.excellent_set.kill: 0.08"""
-            
-            delta2_content = """# Test delta 2
-receive_probabilities.in_play_serve.excellent: 0.10
-block_probabilities.power_attack.stuff: 0.06"""
-            
-            with open('scenario1.yaml', 'w') as f:
-                f.write(delta1_content)
-            with open('scenario2.yaml', 'w') as f:
-                f.write(delta2_content)
-            
-            # Test multi-file custom analysis  
-            result = run_bvsim(['skills', '--custom', 'scenario1.yaml', 'scenario2.yaml', '--quick', '--runs', '1'])
+
+            # Create basic team variant files (partial definitions overriding Basic template defaults)
+            variant1 = """name: Variant One
+serve_probabilities:
+    ace: 0.12
+    in_play: 0.83
+    error: 0.05
+attack_probabilities:
+    excellent_set:
+        kill: 0.75
+        error: 0.12
+        defended: 0.13
+"""
+            variant2 = """name: Variant Two
+block_probabilities:
+    power_attack:
+        stuff: 0.25
+        deflection_to_attack: 0.15
+        deflection_to_defense: 0.10
+        no_touch: 0.50
+receive_probabilities:
+    in_play_serve:
+        excellent: 0.40
+        good: 0.40
+        poor: 0.15
+        error: 0.05
+"""
+            with open('variant1.yaml', 'w') as f:
+                f.write(variant1)
+            with open('variant2.yaml', 'w') as f:
+                f.write(variant2)
+
+            # Test multi-file custom analysis using variant teams (baseline implicit Basic)
+            result = run_bvsim(['skills', '--custom', 'variant1.yaml,variant2.yaml', '--quick', '--runs', '1'])
             assert result.returncode == 0, f"Multi-file custom failed: {result.stderr}"
             assert 'Custom Scenarios Statistical Analysis' in result.stdout
-            assert 'scenario1' in result.stdout
-            assert 'scenario2' in result.stdout
+            assert 'variant1' in result.stdout
+            assert 'variant2' in result.stdout
             
             print("✓ Multi-file custom skills analysis works")
         finally:

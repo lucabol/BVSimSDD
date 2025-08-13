@@ -163,13 +163,13 @@ Match Impact: +24.15% [+18.2% - +30.1%]
 - **Visual Charts**: Confidence interval charts with zero baseline for easy interpretation
 - **Parallel Processing**: Multiple analyses run simultaneously for speed
 
-#### Custom Improvement Scenarios with Statistical Analysis
+#### Custom Team Variant Scenarios with Statistical Analysis
 
 ```bash
-# Compare multiple improvement strategies with statistical validation (NEW!)
-./bvsim skills --custom examples/scenario_serve_focused.yaml examples/scenario_attack_focused.yaml examples/scenario_balanced.yaml
-./bvsim skills --custom improvements/*.yaml --runs 10        # Higher confidence with 10 runs
-./bvsim skills --custom scenario_a.yaml --confidence 0.99   # 99% confidence intervals
+# Compare multiple full/partial team variant YAML files against baseline (default Basic team unless team args provided)
+./bvsim skills --custom team_variant_a.yaml,team_variant_b.yaml,team_variant_c.yaml
+./bvsim skills --custom $(echo variants/*.yaml | tr ' ' ',') --runs 10   # Expand then comma-join
+./bvsim skills --custom variant_a.yaml --confidence 0.99 # Single file still allowed
 ```
 
 **NEW Multi-file Statistical Output:**
@@ -177,14 +177,14 @@ Match Impact: +24.15% [+18.2% - +30.1%]
 Custom Scenarios Statistical Analysis
 Number of Runs: 5 | Average Duration: 1.8s
 Baseline Win Rate: 50.1% [95% CI: 49.7% - 50.5%]
-Testing 3 custom scenarios (200,000 points each)
+Testing 3 custom team variants (200,000 points each)
 
 Scenario File                                      Point Impact  Match Impact  95% Match CI              Significant
                                                    (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   
 --------------------------------------------------------------------------------------------------------------------------------------------
-scenario_attack_focused                             +4.12%     +31.24%     [+26.8% - +35.7%]         YES
-scenario_balanced                                   +3.18%     +23.47%     [+19.2% - +27.8%]         YES
-scenario_serve_focused                              +2.84%     +20.15%     [+16.1% - +24.2%]         YES
+variant_attack_focus                                +4.12%     +31.24%     [+26.8% - +35.7%]         YES
+variant_balanced                                    +3.18%     +23.47%     [+19.2% - +27.8%]         YES
+variant_serve_focus                                 +2.84%     +20.15%     [+16.1% - +24.2%]         YES
 
 MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Scenarios):
 Match % │

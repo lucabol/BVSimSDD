@@ -230,172 +230,97 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
     return results
 
 
-def _test_single_deltas_file(args_tuple):
-    """Helper function to test a single deltas file - designed for parallel execution"""
-    (deltas_file, team_dict, opponent_dict, points_per_test, base_serving, baseline_win_rate) = args_tuple
-    
-    import yaml
-    from pathlib import Path
-    
-    # Load deltas file
-    deltas_path = Path(deltas_file)
-    if not deltas_path.exists():
-        return deltas_file, None, f"Deltas file not found: {deltas_file}"
-    
-    try:
-        with open(deltas_path, 'r') as f:
-            deltas_data = yaml.safe_load(f)
-        
-        if not deltas_data:
-            return deltas_file, None, f"Empty or invalid deltas file: {deltas_file}"
-        
-        # Recreate team objects from dictionaries (needed for multiprocessing)
-        team = Team.from_dict(team_dict)
-        opponent = Team.from_dict(opponent_dict)
-        
-        # Create modified team with ALL deltas applied together
-        modified_team_data = copy.deepcopy(team_dict)
-        
-        # Apply all deltas from this file
-        for parameter, delta_value in deltas_data.items():
-            try:
-                # Get current value
-                current_value = get_nested_value(modified_team_data, parameter)
-                if not isinstance(current_value, (int, float)):
-                    print(f"Warning: Skipping non-numeric parameter '{parameter}' in {deltas_file}")
-                    continue
-                
-                # Calculate new value (additive)
-                new_value = current_value + delta_value
-                
-                # Apply delta improvement with probability adjustment
-                modified_team_data = _adjust_probability_distribution(
-                    modified_team_data, 
-                    parameter, 
-                    new_value
-                )
-                
-            except KeyError:
-                print(f"Warning: Parameter '{parameter}' not found in team configuration (file: {deltas_file})")
-                continue
-            except Exception as e:
-                print(f"Warning: Error processing parameter '{parameter}' in {deltas_file}: {e}")
-                continue
-        
-        # Create the modified team and calculate win rate
-        modified_team = Team.from_dict(modified_team_data)
-        file_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
-        improvement = file_win_rate - baseline_win_rate
-        
-        # Use filename without extension as display name
-        file_display_name = deltas_path.stem
-        
-        result = {
-            "win_rate": file_win_rate,
-            "improvement": improvement,
-            "file_path": deltas_file,
-            "deltas_count": len(deltas_data)
+
+def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_files: list, points_per_test: int = 100000,
+                              base_serving: str = "A", parallel: bool = True) -> dict:
+    """Analyze impact of multiple full team variant YAML files.
+
+    Each provided YAML file is treated as a (possibly partial) team definition per Team.from_yaml_file.
+    The variant team is played against the opponent for points_per_test points and improvement vs
+    the baseline (base_team) win rate is reported.
+
+    Returned structure intentionally mirrors multi_delta_skill_analysis for drop-in replacement:
+    {
+        "baseline_win_rate": float,
+        "file_results": {
+            <variant_stem>: {"win_rate": float, "improvement": float, "file_path": str}
         }
-        
-        return deltas_file, result, None
-        
-    except Exception as e:
-        return deltas_file, None, f"Error processing file {deltas_file}: {e}"
-
-
-def multi_delta_skill_analysis(team: Team, opponent: Team, deltas_files: list, points_per_test: int = 100000,
-                               base_serving: str = "A", parallel: bool = True) -> dict:
-    """
-    Analyze impact of applying all deltas from multiple files (each file applied as a complete set).
-    
-    Args:
-        team: Base team configuration to improve
-        opponent: Opponent team configuration
-        deltas_files: List of YAML files with dot-notation improvements
-        points_per_test: Number of points to simulate per test (default: 100000)
-        base_serving: Which team serves ("A" or "B")
-        parallel: Use parallel processing for file testing (default: True)
-        
-    Returns:
-        Dictionary with baseline and results for each delta file
+    }
     """
     from pathlib import Path
-    
-    # Calculate baseline win rate
-    baseline_win_rate = _calculate_win_rate(team, opponent, points_per_test, base_serving)
-    
-    results = {
-        "baseline_win_rate": baseline_win_rate,
-        "file_results": {}
-    }
-    
-    # Only use parallel processing for larger workloads where the overhead is worth it
-    if parallel and len(deltas_files) > 1 and points_per_test >= 50000:
-        # Parallel processing using ProcessPoolExecutor for CPU-bound simulation work
-        team_dict = team.to_dict()
+    import sys
+    import yaml
+
+    baseline_win_rate = _calculate_win_rate(base_team, opponent, points_per_test, base_serving)
+    results = {"baseline_win_rate": baseline_win_rate, "file_results": {}}
+
+    # NOTE: Nested function removed for multiprocessing pickling. See _test_single_team_variant_file.
+
+    # Only parallelize if beneficial
+    if parallel and len(team_variant_files) > 1 and points_per_test >= 50000:
         opponent_dict = opponent.to_dict()
-        
-        # Prepare arguments for parallel execution
         file_args = [
-            (deltas_file, team_dict, opponent_dict, points_per_test, base_serving, baseline_win_rate)
-            for deltas_file in deltas_files
+        (team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate)
+            for team_file in team_variant_files
         ]
-        
-        # Use number of CPU cores, but cap at reasonable maximum
-        max_workers = min(multiprocessing.cpu_count(), len(deltas_files), 8)
-        
+        max_workers = min(multiprocessing.cpu_count(), len(team_variant_files), 8)
         try:
             with ProcessPoolExecutor(max_workers=max_workers) as executor:
-                # Submit all file tests
                 future_to_file = {
-                    executor.submit(_test_single_deltas_file, args): args[0]
+            executor.submit(_test_single_team_variant_file, args): args[0]
                     for args in file_args
                 }
-                
-                # Collect results as they complete
-                completed_count = 0
-                total_files = len(deltas_files)
-                
+                completed = 0
+                total = len(team_variant_files)
                 for future in as_completed(future_to_file):
-                    completed_count += 1
-                    deltas_file, result, error = future.result()
-                    
+                    completed += 1
+                    team_file, result, error = future.result()
                     if error:
                         print(f"Warning: {error}")
                     elif result is not None:
-                        file_display_name = Path(deltas_file).stem
-                        results["file_results"][file_display_name] = result
-                    
-                    # Progress indicator - only show if not formatting as JSON
-                    import sys
+                        stem = Path(team_file).stem
+                        results["file_results"][stem] = result
                     if sys.stdout.isatty():
-                        print(f"\rProgress: {completed_count}/{total_files} files tested", end="", flush=True)
-                
-                # Final newline after progress complete
-                import sys
+                        print(f"\rProgress: {completed}/{total} team variants tested", end="", flush=True)
                 if sys.stdout.isatty():
                     print()
-        
-        except (OSError, RuntimeError) as e:
-            # ProcessPoolExecutor failed, fall back to sequential processing
-            print(f"Warning: Parallel processing failed ({e}), falling back to sequential")
-            parallel = False
-    
-    if not parallel or len(deltas_files) <= 1 or points_per_test < 50000:
-        # Sequential processing (fallback or when parallel=False/not applicable)
-        for deltas_file in deltas_files:
-            deltas_file, result, error = _test_single_deltas_file((
-                deltas_file, team.to_dict(), opponent.to_dict(), 
-                points_per_test, base_serving, baseline_win_rate
-            ))
-            
+        except (OSError, RuntimeError):
+            parallel = False  # Fallback to sequential
+    if not parallel or len(team_variant_files) <= 1 or points_per_test < 50000:
+        opponent_dict = opponent.to_dict()
+        for team_file in team_variant_files:
+            team_file, result, error = _test_single_team_variant_file((team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate))
             if error:
                 print(f"Warning: {error}")
             elif result is not None:
-                file_display_name = Path(deltas_file).stem
-                results["file_results"][file_display_name] = result
-    
+                stem = Path(team_file).stem
+                results["file_results"][stem] = result
     return results
+
+
+def _test_single_team_variant_file(args_tuple):
+    """Top-level helper for testing a single team variant file (for multiprocessing)."""
+    (team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate) = args_tuple
+    from pathlib import Path
+    import yaml
+    try:
+        path = Path(team_file)
+        if not path.exists():
+            return team_file, None, f"Team variant file not found: {team_file}"
+        with open(path, 'r') as f:
+            data = yaml.safe_load(f) or {}
+        variant_team = Team.from_dict(data)
+        opponent_team = Team.from_dict(opponent_dict)
+        win_rate = _calculate_win_rate(variant_team, opponent_team, points_per_test, base_serving)
+        improvement = win_rate - baseline_win_rate
+        return team_file, {
+            "win_rate": win_rate,
+            "improvement": improvement,
+            "file_path": team_file,
+            "deltas_count": 0
+        }, None
+    except Exception as e:
+        return team_file, None, f"Error processing team variant {team_file}: {e}"
 
 
 def _test_single_parameter(args_tuple):

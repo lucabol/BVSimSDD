@@ -13,7 +13,7 @@ from bvsim_cli.templates import get_basic_template, get_advanced_template, creat
 from bvsim_cli.comparison import compare_teams, format_comparison_text
 from bvsim_cli.simulation import run_large_simulation
 from bvsim_stats.models import SimulationResults, PointResult
-from bvsim_stats.analysis import analyze_simulation_results, full_skill_analysis, multi_delta_skill_analysis
+from bvsim_stats.analysis import analyze_simulation_results, full_skill_analysis, multi_team_skill_analysis
 
 TEAM_GLOB_PATTERNS = ["team_*.yaml", "team_*.yml", "*.yaml", "*.yml"]
 
@@ -449,7 +449,7 @@ def register_routes(app: Flask) -> None:
         data = request.get_json(force=True, silent=True) or {}
         team_name_raw = (data.get("team") or "").strip()
         opponent_name_raw = (data.get("opponent") or "").strip()
-        custom_files = data.get("custom")  # list of delta yaml
+        custom_files = data.get("custom")  # list of team variant YAML (partial or full definitions)
         improve = data.get("improve")  # e.g. 0.05 or 5%
         quick = data.get("quick")
         accurate = data.get("accurate")
@@ -500,7 +500,8 @@ def register_routes(app: Flask) -> None:
             else:
                 change_value = 0.05
             if custom_files:
-                results = multi_delta_skill_analysis(team=team, opponent=opponent, deltas_files=custom_files, points_per_test=points_per_test)
+                # Treat each custom file as a full/partial team variant definition compared to baseline team
+                results = multi_team_skill_analysis(base_team=team, opponent=opponent, team_variant_files=custom_files, points_per_test=points_per_test)
             else:
                 results = full_skill_analysis(team=team, opponent=opponent, change_value=change_value, points_per_test=points_per_test, parallel=True)
             response = {"parameters": {"points": points_per_test, "change_value": change_value, "custom": bool(custom_files), "used_defaults": used_defaults}, "results": results, "teams": {"team": team.name, "opponent": opponent.name}}

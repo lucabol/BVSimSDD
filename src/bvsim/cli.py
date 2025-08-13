@@ -20,7 +20,7 @@ from . import __version__
 from bvsim_core.team import Team
 from bvsim_core.state_machine import simulate_point
 from bvsim_stats.models import SimulationResults
-from bvsim_stats.analysis import analyze_simulation_results, delta_skill_analysis, full_skill_analysis, sensitivity_analysis, multi_delta_skill_analysis
+from bvsim_stats.analysis import analyze_simulation_results, delta_skill_analysis, full_skill_analysis, sensitivity_analysis, multi_team_skill_analysis
 from bvsim_cli.templates import get_basic_template, get_advanced_template, create_team_template
 from bvsim_cli.comparison import compare_teams
 
@@ -154,17 +154,17 @@ def run_single_skills_analysis(team: Team, opponent: Team, change_value: float, 
     return results, duration
 
 
-def run_single_custom_analysis(team: Team, opponent: Team, delta_files: List[str], points_per_test: int, run_number: int) -> Tuple[Dict[str, Any], float]:
-    """Run a single custom scenario analysis and return the results and duration."""
+def run_single_custom_analysis(team: Team, opponent: Team, custom_team_files: List[str], points_per_test: int, run_number: int) -> Tuple[Dict[str, Any], float]:
+    """Run a single custom scenario analysis (team variant files) and return the results and duration."""
     start_time = time.time()
-    
-    results = multi_delta_skill_analysis(
-        team=team,
+
+    results = multi_team_skill_analysis(
+        base_team=team,
         opponent=opponent,
-        deltas_files=delta_files,
+        team_variant_files=custom_team_files,
         points_per_test=points_per_test
     )
-    
+
     duration = time.time() - start_time
     return results, duration
 
@@ -789,8 +789,14 @@ def cmd_skills(args):
         # Determine runs - default is ALWAYS 5 unless explicitly overridden
         num_runs = args.runs or 5
         
-        # Always use statistical analysis mode including for custom analysis
+        # Parse custom comma-separated list into array if provided
+        custom_files = None
         if args.custom:
+            raw = args.custom.strip()
+            if raw:
+                custom_files = [f.strip() for f in raw.split(',') if f.strip()]
+        # Always use statistical analysis mode including for custom analysis
+        if custom_files:
             # Custom scenarios statistical analysis
             points_desc = f"{points//1000}k points each" if points >= 1000 else f"{points} points each"
             
@@ -808,7 +814,7 @@ def cmd_skills(args):
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     # Submit all tasks
                     futures = [
-                        executor.submit(run_single_custom_analysis, team, opponent, args.custom, points, i+1)
+                        executor.submit(run_single_custom_analysis, team, opponent, custom_files, points, i+1)
                         for i in range(num_runs)
                     ]
                     
@@ -832,7 +838,7 @@ def cmd_skills(args):
                     combined_results = {
                         "custom_statistical_analysis": True,
                         "num_runs": num_runs,
-                        "scenario_files": args.custom,
+                        "scenario_files": custom_files,
                         "points_per_test": points,
                         "individual_runs": all_results,
                         "execution_summary": {
@@ -843,7 +849,7 @@ def cmd_skills(args):
                     }
                     print(json.dumps(combined_results, indent=2))
                 else:
-                    print_custom_statistical_analysis(all_results, all_durations, args.custom, points)
+                    print_custom_statistical_analysis(all_results, all_durations, custom_files, points)
                     
                     total_duration = time.time() - total_start_time
                     avg_duration = statistics.mean(all_durations)
@@ -1261,7 +1267,7 @@ def main(argv=None):
     parser_skills = subparsers.add_parser('skills', help='Analyze which skills have biggest impact on winning')
     parser_skills.add_argument('teams', nargs='*', help='Team files (0=default, 1=vs self, 2=vs opponent)')
     parser_skills.add_argument('--improve', help='Test improvement amount (e.g., "5%%" or "0.05")')
-    parser_skills.add_argument('--custom', nargs='+', help='YAML files with custom improvements (multiple files supported)')
+    parser_skills.add_argument('--custom', help='Comma-separated team variant YAML files (each a full or partial team definition)')
     parser_skills.add_argument('--quick', action='store_true', help='Fast analysis (10k points)')
     parser_skills.add_argument('--accurate', action='store_true', help='High precision (200k points)')
     parser_skills.add_argument('--points', type=int, help='Custom points per test')

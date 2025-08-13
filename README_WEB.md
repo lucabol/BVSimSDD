@@ -2,6 +2,36 @@
 
 A minimal Flask-based web UI exposing the core BVSim simulator features without modifying existing library code.
 
+## Quick Start (Scripts)
+
+After installing dependencies (see Running section), you can launch the web UI with provided helper scripts:
+
+### Bash (Linux/macOS)
+```bash
+./run_web.sh                # default host 0.0.0.0, port 8000, debug on
+./run_web.sh 5000           # override port
+./run_web.sh 5000 127.0.0.1 # custom port + host
+BVSIM_WEB_PORT=9000 BVSIM_WEB_DEBUG=false ./run_web.sh
+```
+
+### Windows (CMD)
+```bat
+run_web.bat                 REM default 0.0.0.0:8000
+run_web.bat 5000            REM custom port
+run_web.bat 5000 127.0.0.1  REM custom port + host
+set BVSIM_WEB_PORT=9000 & set BVSIM_WEB_DEBUG=false & run_web.bat
+```
+
+### Environment Variables
+| Variable | Default | Description |
+|----------|---------|-------------|
+| BVSIM_WEB_HOST | 0.0.0.0 | Interface to bind the server |
+| BVSIM_WEB_PORT | 8000 | Listening port |
+| BVSIM_WEB_DEBUG | true | Flask debug / reload mode |
+| BVSIM_WEB_WORKERS | (unset) | If set and gunicorn installed, use that many workers (Unix) |
+
+The Python entrypoint (`python -m bvsim_web`) now respects these environment variables.
+
 ## Features
 - List / create / upload team YAML files (stored in working directory)
 - Run simulations with quick / standard / accurate presets (10k / 200k / 400k points)

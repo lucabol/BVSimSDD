@@ -18,10 +18,14 @@ def test_version(client):
 
 
 def test_create_team_and_list(client):
-    rv = client.post('/api/teams', json={"name": "WebTestTeam", "template": "basic"})
+    # Use overwrite to make test idempotent if file persists from earlier test run
+    rv = client.post('/api/teams', json={"name": "WebTestTeam", "template": "basic", "overwrite": True})
     assert rv.status_code == 200, rv.data
     data = rv.get_json()
     assert data.get('created')
+    # Enable inclusion of test teams in list endpoint
+    import os
+    os.environ['BVSIM_INCLUDE_TEST_TEAMS'] = '1'
     # list
     rv2 = client.get('/api/teams')
     assert rv2.status_code == 200
@@ -47,7 +51,7 @@ def test_simulate_blank_defaults(client):
 
 def test_simulate_one_blank_other_basic(client):
     # Provide only team_a, leave team_b blank -> team_b should be Basic (not Advanced)
-    rv = client.post('/api/teams', json={"name": "SoloTeamX", "template": "basic"})
+    rv = client.post('/api/teams', json={"name": "SoloTeamX", "template": "basic", "overwrite": True})
     assert rv.status_code == 200
     rv2 = client.post('/api/simulate', json={"team_a": "tests/data/teams/team_soloteamx.yaml", "team_b": "", "quick": True})
     assert rv2.status_code == 200, rv2.data

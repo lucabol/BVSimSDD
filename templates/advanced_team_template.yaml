@@ -1,14 +1,6 @@
 name: "{team_name}"
-serve_probabilities:
-  ace: 0.10
-  in_play: 0.85
-  error: 0.05
-receive_probabilities:
-  in_play_serve:
-    excellent: 0.35
-    good: 0.40
-    poor: 0.20
-    error: 0.05
+# Advanced template now only lists differences vs the Basic template.
+# Omitted sections (serve_probabilities, receive_probabilities) default to Basic.
 set_probabilities:
   excellent_reception:
     excellent: 0.74

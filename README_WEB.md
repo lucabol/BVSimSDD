@@ -41,6 +41,7 @@ The Python entrypoint (`python -m bvsim_web`) now respects these environment var
 	- Visual timeline view of rally sequences with action qualities & winner highlighting
 - Download existing team YAML files
 - Collapsible raw JSON output panel (minimized by default) to keep UI clean
+- Supports **minimal-diff team files**: uploaded / created team YAMLs may omit unchanged top-level probability sections; omitted sections auto-fill from the Basic template.
 
 ## Architecture
 Package `bvsim_web` (separate from core) provides:

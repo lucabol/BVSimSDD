@@ -277,7 +277,89 @@ Teams are defined in YAML files with conditional probability distributions. The 
 - **External Templates**: Team probabilities stored in `templates/*.yaml` files (not hardcoded)
 - **Easy Customization**: Modify `templates/basic_team_template.yaml` to change default team characteristics
 - **Version Control**: Template changes tracked separately from code changes
-- **Key Principle**: All probability distributions must sum to 1.0. The simulator validates this automatically.
+- **Key Principles**:
+   - Every provided probability distribution must sum to 1.0 (validated automatically)
+   - You can now provide **partial / minimal-diff team files**: omit any top-level sections that are unchanged from the Basic template
+
+### Minimal-Diff Team YAMLs (NEW)
+Instead of repeating the full structure, a team file may include only the sections that differ from the Basic template. Omitted sections are auto-filled with Basic defaults at load time.
+
+Rules:
+1. Any omitted top-level section (`serve_probabilities`, `receive_probabilities`, etc.) is copied from the Basic template.
+2. If you include a section, each inner distribution you list must still be complete and sum to 1.0.
+3. You may include only a subset of top-level sections (e.g., just `attack_probabilities`).
+4. Validation still enforces correctness for the sections you provide.
+
+Example – Full (OLD style) vs Minimal-Diff (NEW) Advanced Template:
+
+Old (verbose):
+```yaml
+name: EliteAttack
+serve_probabilities:
+   ace: 0.10
+   in_play: 0.85
+   error: 0.05
+attack_probabilities:
+   excellent_set:
+      kill: 0.80
+      error: 0.10
+      defended: 0.10
+   good_set:
+      kill: 0.60
+      error: 0.15
+      defended: 0.25
+   poor_set:
+      kill: 0.35
+      error: 0.30
+      defended: 0.35
+... (other unchanged sections repeated)
+```
+
+Minimal-Diff (recommended):
+```yaml
+name: EliteAttack
+attack_probabilities:
+   excellent_set:
+      kill: 0.80
+      error: 0.10
+      defended: 0.10
+   good_set:
+      kill: 0.60
+      error: 0.15
+      defended: 0.25
+   poor_set:
+      kill: 0.35
+      error: 0.30
+      defended: 0.35
+```
+
+Example – Single skill override (Serve-only specialist):
+```yaml
+name: AceMachine
+serve_probabilities:
+   ace: 1.0
+   in_play: 0.0
+   error: 0.0
+```
+
+Example – Multiple section overrides:
+```yaml
+name: StrongReceptionDefense
+receive_probabilities:
+   in_play_serve:
+      excellent: 0.38
+      good: 0.44
+      poor: 0.17
+      error: 0.01
+block_probabilities:
+   power_attack:
+      stuff: 0.22
+      deflection_to_attack: 0.165
+      deflection_to_defense: 0.165
+      no_touch: 0.45
+```
+
+The loader merges these with the Basic defaults internally, so downstream simulation logic always receives a fully populated team object.
 
 ## Block Mechanics
 

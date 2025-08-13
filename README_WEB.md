@@ -126,3 +126,7 @@ Providing an explicit `points` overrides all presets.
 
 ---
 This MVP keeps footprint small while exposing core simulator capabilities.
+
+### Added: JSON Syntax Highlighting
+The JSON Output panel now uses a lightweight custom tokenizer (no external JS dependency) for syntax coloring (keys, strings, numbers, booleans, null). This avoids layout glitches previously seen with the CDN highlight library. To adjust colors, edit the `.j-key`, `.j-string`, `.j-number`, `.j-bool`, and `.j-null` CSS rules in `index.html`.
+

@@ -70,8 +70,40 @@ function clearWorking() {
 function out(obj) {
   clearWorking();
   const el = document.getElementById('output');
-  // Ensure output stays collapsed unless user opens it; do not auto-open
-  el.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  if(!el) return;
+  let raw = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  if (!raw) { el.textContent=''; return; }
+  function esc(s){ return s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
+  const lines = raw.split(/\n/).map(line => {
+    let outLine=''; let i=0;
+    while(i<line.length){
+      const ch=line[i];
+      if(ch==='"'){
+        let j=i+1; let str=''; let escaped=false;
+        for(;j<line.length;j++){
+          const c=line[j]; str+=c;
+          if(escaped){ escaped=false; continue; }
+            if(c==='\\'){ escaped=true; continue; }
+            if(c==='"') break;
+        }
+        const full='"'+str; const after=line.slice(j+1).trimStart(); const isKey=after.startsWith(':');
+        outLine += `<span class="${isKey?'j-key':'j-string'}">${esc(full)}</span>`; i=j+1; continue;
+      }
+      if(/[-0-9]/.test(ch)){
+        const m=line.slice(i).match(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+        if(m){ outLine+=`<span class="j-number">${m[0]}</span>`; i+=m[0].length; continue; }
+      }
+      if(/[tfn]/.test(ch)){
+        const rest=line.slice(i);
+        if(rest.startsWith('true')) { outLine+='<span class="j-bool">true</span>'; i+=4; continue; }
+        if(rest.startsWith('false')) { outLine+='<span class="j-bool">false</span>'; i+=5; continue; }
+        if(rest.startsWith('null')) { outLine+='<span class="j-null">null</span>'; i+=4; continue; }
+      }
+      outLine+=esc(ch); i++;
+    }
+    return outLine;
+  });
+  el.innerHTML = lines.join('\n');
 }
 
 // Statistical match impact chart (horizontal CI lines)

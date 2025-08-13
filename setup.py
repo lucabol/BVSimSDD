@@ -44,6 +44,8 @@ setup(
     entry_points={
         "console_scripts": [
             "bvsim=bvsim.cli:main",
+            # Expose high-level CLI module for compare-teams and other commands
+            "bvsim-cli=bvsim_cli.cli:main",
         ],
     },
     include_package_data=True,

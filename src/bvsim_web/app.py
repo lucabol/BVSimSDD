@@ -1,6 +1,7 @@
 from __future__ import annotations
 import io
 import json
+import os
 import traceback
 from typing import Any, Dict, List, Optional
 from pathlib import Path
@@ -20,16 +21,28 @@ TEAM_GLOB_PATTERNS = ["team_*.yaml", "team_*.yml", "*.yaml", "*.yml"]
 def list_team_files() -> List[Path]:
     files: List[Path] = []
     seen: set[str] = set()
-    for pattern in TEAM_GLOB_PATTERNS:
-        for p in Path.cwd().glob(pattern):
-            if p.suffix.lower() in (".yaml", ".yml") and p.name not in seen:
-                try:
-                    # Basic validation: ensure it can load
-                    Team.from_yaml_file(str(p))
-                    files.append(p)
-                    seen.add(p.name)
-                except Exception:
-                    continue
+    include_tests = os.getenv('BVSIM_INCLUDE_TEST_TEAMS') == '1'
+    hidden_name_fragments = { 'webtestteam', 'sample_team_a', 'sample_team_b' }
+    # Directories to search: project root (cwd), optional tests/data/teams for curated test fixtures
+    search_dirs = [Path.cwd()]
+    test_teams_dir = Path.cwd() / 'tests' / 'data' / 'teams'
+    if test_teams_dir.exists():
+        search_dirs.append(test_teams_dir)
+    for directory in search_dirs:
+        for pattern in TEAM_GLOB_PATTERNS:
+            for p in directory.glob(pattern):
+                if p.suffix.lower() in ('.yaml', '.yml') and p.name not in seen:
+                    # Skip internal/test/demo files unless explicitly included
+                    lowered = p.name.lower()
+                    if not include_tests:
+                        if any(fragment in lowered for fragment in hidden_name_fragments):
+                            continue
+                    try:
+                        Team.from_yaml_file(str(p))
+                        files.append(p)
+                        seen.add(p.name)
+                    except Exception:
+                        continue
     return files
 
 
@@ -50,6 +63,9 @@ def load_team(name_or_file: str) -> Team:
         ])
     # candidate directories: cwd, cwd/.. (project root), cwd/../templates maybe not needed
     dirs = [Path.cwd(), Path.cwd().parent]
+    test_teams_dir = Path.cwd() / 'tests' / 'data' / 'teams'
+    if test_teams_dir.exists():
+        dirs.append(test_teams_dir)
     for directory in dirs:
         for fname in search_names:
             candidate = directory / fname

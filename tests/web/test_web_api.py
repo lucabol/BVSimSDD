@@ -49,7 +49,7 @@ def test_simulate_one_blank_other_basic(client):
     # Provide only team_a, leave team_b blank -> team_b should be Basic (not Advanced)
     rv = client.post('/api/teams', json={"name": "SoloTeamX", "template": "basic"})
     assert rv.status_code == 200
-    rv2 = client.post('/api/simulate', json={"team_a": "team_soloteamx.yaml", "team_b": "", "quick": True})
+    rv2 = client.post('/api/simulate', json={"team_a": "tests/data/teams/team_soloteamx.yaml", "team_b": "", "quick": True})
     assert rv2.status_code == 200, rv2.data
     data = rv2.get_json()
     assert data['parameters'].get('used_defaults') is True
@@ -65,7 +65,7 @@ def test_skills_blank_defaults(client):
     assert data['teams']['opponent'] == 'Team B'
 
 def test_skills_one_blank_other_basic(client):
-    rv = client.post('/api/skills', json={"team": "team_soloteamx.yaml", "quick": True})
+    rv = client.post('/api/skills', json={"team": "tests/data/teams/team_soloteamx.yaml", "quick": True})
     assert rv.status_code == 200
     data = rv.get_json()
     # Opponent blank -> Basic template Team B

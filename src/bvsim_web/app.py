@@ -171,6 +171,38 @@ def register_routes(app: Flask) -> None:
         except Exception as e:
             return error_response(f"Failed to load team: {e}", 500)
 
+    # Template (Basic / Advanced) endpoints for read-only viewing & download
+    @app.get("/api/templates/<kind>")
+    def api_get_template(kind: str):
+        import yaml
+        k = kind.lower()
+        if k in ("basic", "__basic__"):
+            data = get_basic_template("Basic")
+            name = "Basic"
+        elif k in ("advanced", "__advanced__"):
+            data = get_advanced_template("Advanced")
+            name = "Advanced"
+        else:
+            return error_response("Unknown template kind", 404)
+        content = yaml.dump(data, default_flow_style=False, indent=2, sort_keys=False)
+        # For templates we intentionally omit a real filename so frontend can disable save
+        return jsonify({"template": True, "kind": k, "name": name, "content": content})
+
+    @app.get("/api/templates/<kind>/download")
+    def api_download_template(kind: str):
+        import yaml, io
+        k = kind.lower()
+        if k in ("basic", "__basic__"):
+            data = get_basic_template("Basic")
+            name = "basic_template.yaml"
+        elif k in ("advanced", "__advanced__"):
+            data = get_advanced_template("Advanced")
+            name = "advanced_template.yaml"
+        else:
+            return error_response("Unknown template kind", 404)
+        content = yaml.dump(data, default_flow_style=False, indent=2, sort_keys=False).encode()
+        return send_file(io.BytesIO(content), as_attachment=True, download_name=name, mimetype='text/yaml')
+
     @app.put("/api/teams/<team_file>")
     def api_update_team(team_file: str):
         p = Path(team_file)

@@ -412,22 +412,67 @@ async function refreshTeams() {
     const list = document.getElementById('teamList');
     if (!list) return; // defensive
     list.innerHTML='';
-    data.teams.forEach(t=>{
+    // Sort teams alphabetically by display name (case-insensitive)
+    const sortedTeams = (data.teams || []).slice().sort((a,b)=>{
+      const an = (a.name || a.file || '').toLowerCase();
+      const bn = (b.name || b.file || '').toLowerCase();
+      if(an < bn) return -1; if(an > bn) return 1; return 0;
+    });
+
+    // Helper to build list item (regular team)
+    function addTeamListItem(displayName, fileName, opts={ disabled:false, template:false }){
       const li=document.createElement('li');
-      const fname = t.file || '';
-      const safeFile = fname.replace(/"/g,'');
-      const teamDisplayName = t.name || '(unnamed)';
+      const safeFile = (fileName||'').replace(/"/g,'');
+      const isTemplate = opts.template;
+      const disabled = opts.disabled;
+      // If a template (Basic/Advanced), disable edit/delete buttons
+      if(isTemplate){
+        li.innerHTML = `
+          <span class=\"team-name\">
+            <svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-volleyball'/></svg>
+            <span>${displayName}</span>
+          </span>
+          <span class=\"actions\">
+            <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team (disabled)\" disabled><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+            <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team (disabled)\" disabled><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
+            <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download template\" disabled><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
+          </span>`;
+      } else {
+        li.innerHTML = `
+          <span class=\"team-name\" onclick=\"openTeam('${safeFile}')\">
+            <svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-volleyball'/></svg>
+            <span>${displayName}</span>
+          </span>
+          <span class=\"actions\">
+            <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+            <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team\" onclick=\"event.stopPropagation(); deleteTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
+            <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download team\" onclick=\"event.stopPropagation(); downloadTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
+          </span>`;
+      }
+      list.appendChild(li);
+    }
+
+    // Add Basic & Advanced pseudo entries first (editable view + download, delete disabled)
+    function addTemplateListItem(label, kind){
+      const li=document.createElement('li');
       li.innerHTML = `
-        <span class=\"team-name\" onclick=\"openTeam('${safeFile}')\">
+        <span class=\"team-name\" onclick=\"openTemplate('${kind}')\">
           <svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-volleyball'/></svg>
-          <span>${teamDisplayName}</span>
+          <span>${label}</span>
         </span>
         <span class=\"actions\">
-          <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
-          <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team\" onclick=\"event.stopPropagation(); deleteTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
-          <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download team\" onclick=\"event.stopPropagation(); downloadTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
+          <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"View ${label} template\" onclick=\"event.stopPropagation(); openTemplate('${kind}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+          <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete disabled\" disabled><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
+          <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download ${label} template\" onclick=\"event.stopPropagation(); downloadTemplate('${kind}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
         </span>`;
       list.appendChild(li);
+    }
+    addTemplateListItem('Basic','basic');
+    addTemplateListItem('Advanced','advanced');
+
+    // Then actual teams
+    sortedTeams.forEach(t=>{
+      addTeamListItem(t.name || '(unnamed)', t.file || '');
     });
     // Populate selects with Basic, Advanced, then available teams
     const selects = ['simTeamA','simTeamB','skillsTeam','skillsOpponent','exTeamA','exTeamB']
@@ -442,10 +487,10 @@ async function refreshTeams() {
         sel.innerHTML='';
         const optBasic=document.createElement('option'); optBasic.value=''; optBasic.textContent='Basic'; sel.appendChild(optBasic);
         const optAdv=document.createElement('option'); optAdv.value='__ADVANCED__'; optAdv.textContent='Advanced'; sel.appendChild(optAdv);
-        if (data.teams.length) {
+        if (sortedTeams.length) {
           const optGroupLabel=document.createElement('option'); optGroupLabel.disabled=true; optGroupLabel.textContent='── Available Teams ──'; sel.appendChild(optGroupLabel);
         }
-        data.teams.forEach(t=> { if(!t.name) return; const o=document.createElement('option'); o.value=t.file || t.name; o.textContent=t.name; sel.appendChild(o); });
+        sortedTeams.forEach(t=> { if(!t.name) return; const o=document.createElement('option'); o.value=t.file || t.name; o.textContent=t.name; sel.appendChild(o); });
         if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value=prev; else sel.value='';
       });
     }
@@ -457,11 +502,11 @@ async function refreshTeams() {
       compareSel.innerHTML='';
       const basicOpt = document.createElement('option'); basicOpt.value='Basic'; basicOpt.textContent='Basic'; compareSel.appendChild(basicOpt);
       const advOpt = document.createElement('option'); advOpt.value='Advanced'; advOpt.textContent='Advanced'; compareSel.appendChild(advOpt);
-      if (data.teams.length) {
+      if (sortedTeams.length) {
         // Add disabled separator like other selects (cannot use <optgroup> because of styling simplicity) 
         const sep = document.createElement('option'); sep.disabled=true; sep.textContent='── Available Teams ──'; compareSel.appendChild(sep);
       }
-      data.teams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; compareSel.appendChild(o); });
+      sortedTeams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; compareSel.appendChild(o); });
       // Re-select prior items where possible
       Array.from(compareSel.options).forEach(o=> { if (prevSelected.includes(o.value)) o.selected=true; });
     }
@@ -472,10 +517,10 @@ async function refreshTeams() {
       baseSel.innerHTML='';
       const optB=document.createElement('option'); optB.value='__BASIC__'; optB.textContent='Basic Template'; baseSel.appendChild(optB);
       const optA=document.createElement('option'); optA.value='__ADVANCED__'; optA.textContent='Advanced Template'; baseSel.appendChild(optA);
-      if (data.teams.length) {
+      if (sortedTeams.length) {
         const sep=document.createElement('option'); sep.disabled=true; sep.textContent='── Existing Teams ──'; baseSel.appendChild(sep);
       }
-      data.teams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; baseSel.appendChild(o); });
+      sortedTeams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; baseSel.appendChild(o); });
       if (preserve && Array.from(baseSel.options).some(o=>o.value===preserve)) baseSel.value=preserve;
     }
   } catch(e){ out(e.message); }
@@ -561,8 +606,28 @@ async function openTeam(file){
     }
     const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = data.file;
     setTeamEditStatus(`Loaded ${data.file}`);
+    // Enable save for real teams
+    const saveBtn = document.getElementById('teamSaveBtn'); if(saveBtn){ saveBtn.disabled=false; saveBtn.title='Save changes'; }
     showTeamModal();
   } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+// Open read-only template (Save disabled)
+async function openTemplate(kind){
+  try {
+    const data = await api(`/api/templates/${encodeURIComponent(kind)}`);
+    const ta = document.getElementById('teamEditor');
+    if(ta){ ta.value = data.content || ''; delete ta.dataset.filename; ta.dataset.templateKind = kind; }
+    if(window.teamYamlEditor && window.teamYamlEditor.session){ window.teamYamlEditor.session.setValue(data.content || ''); }
+    const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = `${data.name} Template (read-only)`;
+    setTeamEditStatus(`Loaded ${data.name} template (read-only)`);
+    const saveBtn = document.getElementById('teamSaveBtn'); if(saveBtn){ saveBtn.disabled=true; saveBtn.title='Templates cannot be saved directly'; }
+    showTeamModal();
+  } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+function downloadTemplate(kind){
+  window.open(`/api/templates/${encodeURIComponent(kind)}/download`, '_blank');
 }
 
 async function saveTeamEdit(){

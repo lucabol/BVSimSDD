@@ -25,6 +25,7 @@ main { padding:14px 16px 32px; }
 .btn--success { --_bg:var(--color-success); --_bg-hover:#124117; }
 .btn--icon { padding:5px; width:30px; justify-content:center; }
 .btn--sm { font-size:.62rem; padding:4px 8px; }
+.btn:disabled, .btn[disabled] { cursor:not-allowed; opacity:.45; filter:grayscale(.4); }
 .btn-group { display:flex; gap:6px; flex-wrap:wrap; }
 .icon { width:1em; height:1em; display:inline-block; flex:0 0 auto; }
 .icon-inline { width:1.1em; height:1.1em; }
@@ -335,7 +336,7 @@ ul.team-list li:hover { background:#f1f5f9; }
       <textarea id="teamEditor" style="display:none;"></textarea>
       <div id="aceTeamEditor"></div>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
-  <button type="button" onclick="saveTeamEdit()" class="btn btn--success"><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg><span>Save</span></button>
+  <button type="button" id="teamSaveBtn" onclick="saveTeamEdit()" class="btn btn--success"><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg><span>Save</span></button>
   <button type="button" class="btn btn--secondary" onclick="downloadCurrentTeam()"><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg><span>Download</span></button>
   <button type="button" class="btn btn--secondary" onclick="formatTeamYaml()"><svg class="icon" aria-hidden="true"><use href="#icon-format"/></svg><span>Format</span></button>
       </div>

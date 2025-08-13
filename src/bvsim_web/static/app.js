@@ -5,6 +5,7 @@ let simulateChart = null; // bar chart for last simulation
 let compareChart = null;  // bar chart for last comparison average win rates
 let lastSkillsData = null; // reserved for future use (e.g., re-sorting)
 // Removed legacy skillsChart variable
+let lastScenariosData = null; // store last scenarios analysis
 
 // Formatting helpers for dynamic titles
 function fmtInt(n){ if(n==null) return ''; if(n>=1_000_000) return (n/1_000_000).toFixed(n%1_000_000?1:0)+'M'; if(n>=1000) return (n/1000).toFixed(n%1000?1:0)+'k'; return ''+n; }
@@ -56,6 +57,11 @@ function setSimulateStatus(msg, spinning=true){
 }
 function setCompareStatus(msg, spinning=true){
   const el = document.getElementById('compareStatus');
+  if(!el) return; if(!msg){ el.textContent=''; return; }
+  el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
+}
+function setScenariosStatus(msg, spinning=true){
+  const el = document.getElementById('scenariosStatus');
   if(!el) return; if(!msg){ el.textContent=''; return; }
   el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
 }
@@ -427,6 +433,9 @@ async function refreshTeams() {
     const selects = ['simTeamA','simTeamB','skillsTeam','skillsOpponent','exTeamA','exTeamB']
       .map(id => document.getElementById(id))
       .filter(el => el && el.tagName === 'SELECT');
+  // Include scenariosTeam/opponent selects if present
+  // Add scenariosTeam (scenariosOpponent removed; scenarios use self-play)
+  const scenTeamEl = document.getElementById('scenariosTeam'); if (scenTeamEl) selects.push(scenTeamEl);
     if (selects.length) {
       selects.forEach(sel => {
         const prev = sel.value;
@@ -469,6 +478,21 @@ async function refreshTeams() {
       data.teams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; baseSel.appendChild(o); });
       if (preserve && Array.from(baseSel.options).some(o=>o.value===preserve)) baseSel.value=preserve;
     }
+  } catch(e){ out(e.message); }
+}
+
+async function refreshScenarioFiles(){
+  try {
+    const data = await api('/api/scenario-files', { _noProgress: true });
+    const sel = document.getElementById('scenarioFiles'); if(!sel) return;
+    const prev = Array.from(sel.selectedOptions).map(o=>o.value);
+    sel.innerHTML='';
+    if(!data.scenario_files || !data.scenario_files.length){
+      const o=document.createElement('option'); o.disabled=true; o.textContent='(No scenario files found)'; sel.appendChild(o); return;
+    }
+    data.scenario_files.forEach(f=>{ const o=document.createElement('option'); o.value=f; o.textContent=f; sel.appendChild(o); });
+    // restore previous selections
+    Array.from(sel.options).forEach(o=>{ if(prev.includes(o.value)) o.selected=true; });
   } catch(e){ out(e.message); }
 }
 
@@ -656,6 +680,43 @@ function skillsAnalysis() { skillsCommon({}); }
 function skillsQuick() { skillsCommon({ quick: true }); }
 function skillsAccurate() { skillsCommon({ accurate: true }); }
 
+// ---- Scenarios (custom team variant comparison) ----
+async function scenarioCommon(opts){
+  startWorking('Analyzing scenarios');
+  setScenariosStatus('Running scenarios...', true);
+  try {
+    const team = document.getElementById('scenariosTeam').value.trim();
+  // Opponent is implicitly the same team (self baseline) per updated requirements
+  const opponent = team;
+    const improve = document.getElementById('scenariosImprove').value.trim();
+    const fileSel = document.getElementById('scenarioFiles');
+    let custom = [];
+    if(fileSel){ custom = Array.from(fileSel.selectedOptions).map(o=>o.value).filter(Boolean); }
+    if(!custom.length){ setScenariosStatus('Select scenario files', false); out('No scenario files selected'); return; }
+    const payload = Object.assign({ custom }, opts);
+  if(team) payload.team = team; if(opponent) payload.opponent = opponent; if(improve) payload.improve = improve;
+    const res = await api('/api/skills', { method:'POST', body: JSON.stringify(payload) });
+    out(res);
+    if(res && res.statistical_analysis && res.skills){
+      clearMatchImpactDisplay();
+      renderMatchImpactChart(res);
+      const paneTitle = document.getElementById('chartPaneTitle');
+      if(paneTitle){ const pts = res.parameters?.points; paneTitle.textContent = `Scenarios (CI): ${res.skills.length} variants (${fmtInt(pts)} pts/run, runs ${res.parameters?.runs||5})`; }
+      setTimeout(()=>{ const legendEl=document.getElementById('matchImpactLegend'); if(legendEl && res.baseline){ const b=res.baseline; const note=document.createElement('div'); note.style.fontSize='.6rem'; note.textContent=`Baseline win rate ${b.mean.toFixed(2)}% [${b.lower.toFixed(2)}%, ${b.upper.toFixed(2)}%].`; legendEl.appendChild(note);} },60);
+    } else if(res && res.results && res.results.file_results){
+      // Fallback single-run structure (no CI)
+      const fileResults = res.results.file_results; const baseline = res.results.baseline_win_rate;
+      const skillsArr = Object.entries(fileResults).map(([stem,v])=>({ parameter: stem, match:{ mean:v.improvement, lower:v.improvement, upper:v.improvement }, significant: v.improvement!==0 }));
+      if(skillsArr.length){ clearMatchImpactDisplay(); renderMatchImpactChart({ statistical_analysis:true, skills: skillsArr }); }
+      const paneTitle = document.getElementById('chartPaneTitle'); if(paneTitle){ paneTitle.textContent=`Scenarios: ${skillsArr.length} variants (baseline ${baseline.toFixed(2)}%)`; }
+    }
+    setScenariosStatus('Scenarios analysis complete.', false);
+  } catch(e){ out(e.message); }
+}
+function scenariosAnalysis(){ scenarioCommon({}); }
+function scenariosQuick(){ scenarioCommon({ quick:true }); }
+function scenariosAccurate(){ scenarioCommon({ accurate:true }); }
+
 async function compareCommon(opts) {
   startWorking('Comparing teams');
   setCompareStatus('Running comparison...', true);
@@ -705,6 +766,7 @@ async function runExamples() {
 }
 
 refreshTeams();
+refreshScenarioFiles();
 
 // ---------------- RALLIES VISUALIZATION -----------------
 // Expected rally object shape: { point_type: 'attack_error', sequence: '[A] A.srv(ok)→B.rcv(gd)→B.set(exc)→B.att(err) → attack_error', winner: 'A' }

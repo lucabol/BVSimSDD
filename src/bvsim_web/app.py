@@ -449,17 +449,17 @@ def register_routes(app: Flask) -> None:
         data = request.get_json(force=True, silent=True) or {}
         team_name_raw = (data.get("team") or "").strip()
         opponent_name_raw = (data.get("opponent") or "").strip()
-        custom_files = data.get("custom")  # list of team variant YAML (partial or full definitions)
-        improve = data.get("improve")  # e.g. 0.05 or 5%
+        custom_files = data.get("custom")
+        improve = data.get("improve")
         quick = data.get("quick")
         accurate = data.get("accurate")
         points = data.get("points")
-        runs = data.get("runs")  # not implementing multi-run for MVP (could extend)
+        runs = data.get("runs")
+        confidence = float(data.get("confidence") or 0.95)
         try:
             used_defaults = False
             note = None
             if not team_name_raw and not opponent_name_raw:
-                # Default both Basic
                 team = Team.from_dict(get_basic_template("Team A"))
                 opponent = Team.from_dict(get_basic_template("Team B"))
                 used_defaults = True
@@ -476,7 +476,7 @@ def register_routes(app: Flask) -> None:
                 else:
                     team = load_team(team_name_raw)
                 if not opponent_name_raw:
-                    opponent = Team.from_dict(get_basic_template("Team B"))  # other defaults to Basic per rule
+                    opponent = Team.from_dict(get_basic_template("Team B"))
                     used_defaults = True
                     note_parts.append("Opponent blank -> Basic template")
                 elif opponent_name_raw == "__ADVANCED__":
@@ -500,17 +500,107 @@ def register_routes(app: Flask) -> None:
             else:
                 change_value = 0.05
             if custom_files:
-                # Treat each custom file as a full/partial team variant definition compared to baseline team
-                results = multi_team_skill_analysis(base_team=team, opponent=opponent, team_variant_files=custom_files, points_per_test=points_per_test)
+                from concurrent.futures import ThreadPoolExecutor
+                import statistics, math
+                clean_files = [f for f in custom_files if f]
+                num_runs = int(runs or 5)
+                if num_runs < 1:
+                    num_runs = 1
+                def run_single():
+                    return multi_team_skill_analysis(base_team=team, opponent=opponent, team_variant_files=clean_files, points_per_test=points_per_test)
+                all_results = []
+                if num_runs == 1:
+                    all_results.append(run_single())
+                else:
+                    max_workers = min(num_runs, 8)
+                    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                        futures = [ex.submit(run_single) for _ in range(num_runs)]
+                        for fut in futures:
+                            try:
+                                all_results.append(fut.result())
+                            except Exception:
+                                traceback.print_exc()
+                if not all_results:
+                    return error_response("No results produced", 500)
+                baseline_rates = [r.get("baseline_win_rate", 0.0) for r in all_results]
+                def ci(values):
+                    if not values: return 0.0, 0.0, 0.0
+                    if len(values) < 2: v = values[0]; return v, v, v
+                    n = len(values)
+                    mean = statistics.mean(values)
+                    if n == 2:
+                        half = abs(values[1]-values[0])/2
+                        return mean, mean-half, mean+half
+                    stdev = statistics.stdev(values)
+                    if n >= 30:
+                        z = 1.96 if confidence >= 0.95 else 1.645
+                        moe = z * (stdev / math.sqrt(n))
+                    else:
+                        z = 2.262 if n==10 else 2.571 if n==5 else 1.96
+                        moe = z * (stdev / math.sqrt(n))
+                    return mean, mean-moe, mean+moe
+                baseline_mean, baseline_lower, baseline_upper = ci(baseline_rates)
+                first_files = all_results[0].get("file_results", {})
+                skills = []
+                for stem in first_files.keys():
+                    improvements = []
+                    for r in all_results:
+                        fr = r.get("file_results", {})
+                        if stem in fr:
+                            improvements.append(fr[stem].get("improvement", 0.0))
+                    if not improvements:
+                        continue
+                    point_mean, point_lower, point_upper = ci(improvements)
+                    match_impacts = []
+                    for imp in improvements:
+                        try:
+                            from bvsim.cli import point_to_match_impact
+                            match_impacts.append(point_to_match_impact(imp))
+                        except Exception:
+                            match_impacts.append(imp)
+                    match_mean, match_lower, match_upper = ci(match_impacts)
+                    significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
+                    skills.append({
+                        "parameter": stem,
+                        "point": {"mean": point_mean, "lower": point_lower, "upper": point_upper},
+                        "match": {"mean": match_mean, "lower": match_lower, "upper": match_upper},
+                        "significant": significant,
+                        "runs": len(improvements)
+                    })
+                skills.sort(key=lambda s: s["match"]["mean"], reverse=True)
+                response = {"statistical_analysis": True,
+                            "skills": skills,
+                            "baseline": {"mean": baseline_mean, "lower": baseline_lower, "upper": baseline_upper},
+                            "parameters": {"points": points_per_test, "change_value": change_value, "custom": True, "runs": num_runs, "confidence": confidence, "used_defaults": used_defaults},
+                            "teams": {"team": team.name, "opponent": opponent.name}}
             else:
                 results = full_skill_analysis(team=team, opponent=opponent, change_value=change_value, points_per_test=points_per_test, parallel=True)
-            response = {"parameters": {"points": points_per_test, "change_value": change_value, "custom": bool(custom_files), "used_defaults": used_defaults}, "results": results, "teams": {"team": team.name, "opponent": opponent.name}}
+                response = {"parameters": {"points": points_per_test, "change_value": change_value, "custom": False, "used_defaults": used_defaults}, "results": results, "teams": {"team": team.name, "opponent": opponent.name}}
             if used_defaults and note:
                 response["note"] = note
             return jsonify(response)
         except Exception as e:
             traceback.print_exc()
             return error_response(f"Skills analysis failed: {e}", 500)
+
+    @app.get("/api/scenario-files")
+    def api_scenario_files():
+        """List available scenario YAML files under examples directory.
+
+        Updated: list root-level *.yaml / *.yml files (non-recursive) considered as scenario variant files.
+        """
+        try:
+            base = Path.cwd()
+            files = []
+            for p in base.glob('*.yml'):
+                files.append(p.name)
+            for p in base.glob('*.yaml'):
+                if p.name not in files:
+                    files.append(p.name)
+            files.sort()
+            return jsonify({"scenario_files": files})
+        except Exception as e:
+            return error_response(f"List scenarios failed: {e}", 500)
 
     @app.post("/api/analyze")
     def api_analyze():

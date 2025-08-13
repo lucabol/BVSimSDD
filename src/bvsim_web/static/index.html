@@ -230,6 +230,27 @@ ul.team-list li:hover { background:#f1f5f9; }
       </div>
     </section>
 
+    <section id="scenarios" class="card">
+      <header class="section-head">
+        <h2>Scenarios</h2>
+      </header>
+      <div class="section-body">
+        <label>Team</label>
+        <select id="scenariosTeam"></select>
+        <label for="scenarioFiles">Select Scenario Files (multi)</label>
+        <select id="scenarioFiles" multiple size="6" aria-describedby="scenarioFilesHelp" style="min-height:110px;"></select>
+  <div id="scenarioFilesHelp" class="note">Hold Ctrl/Command to choose multiple scenario YAML team variant files (root directory *.yaml). Team plays vs itself.</div>
+        <label>Improve (e.g. 5% or 0.05)</label>
+        <input id="scenariosImprove" placeholder="5%" />
+        <div class="btn-group">
+          <button onclick="scenariosAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>
+          <button onclick="scenariosQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>
+          <button onclick="scenariosAccurate()" class="btn btn--purple" title="Accurate"><svg class="icon" aria-hidden="true"><use href="#icon-target"/></svg><span>Accurate</span></button>
+        </div>
+        <div id="scenariosStatus" class="status"></div>
+      </div>
+    </section>
+
     <section id="compare" class="card">
       <header class="section-head">
         <h2>Compare</h2>

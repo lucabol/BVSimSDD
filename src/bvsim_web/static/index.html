@@ -149,6 +149,7 @@ ul.team-list li:hover { background:#f1f5f9; }
     <symbol id="icon-collapse" viewBox="0 0 24 24"><path fill="currentColor" d="M7 15h10l-5-6-5 6Z"/></symbol>
     <symbol id="icon-expand" viewBox="0 0 24 24"><path fill="currentColor" d="M7 9h10l-5 6-5-6Z"/></symbol>
     <symbol id="icon-volleyball" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.7 5.02L12 12.5V2Zm8.7 5.02A10 10 0 0 0 12 2v10.5l8.7-5.48ZM4 9.27V12a8 8 0 0 0 4.62 7.24l1.54-2.67L4 9.27Zm6.16 9.3A8 8 0 0 0 20 12V9.27l-9.38 5.43-.46.8Z"/></symbol>
+  <symbol id="icon-copy" viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v16h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 18H8V7h11v16Z"/></symbol>
   </svg>
   <div id="controls">
     <section id="teams" class="card">
@@ -267,7 +268,7 @@ ul.team-list li:hover { background:#f1f5f9; }
       <div id="matchImpactStatus" class="status"></div>
     </section>
     <section id="textOutputSection">
-      <h2>JSON Output</h2>
+      <h2 style="display:flex;align-items:center;gap:8px;">JSON Output <button type="button" class="btn btn--secondary btn--sm" onclick="copyOutput()" title="Copy JSON"><svg class="icon" aria-hidden="true"><use href="#icon-copy"/></svg><span>Copy</span></button><span id="copyStatus" class="status" style="margin:0"></span></h2>
   <pre id="output" aria-label="JSON output"></pre>
     </section>
   </div>

@@ -67,6 +67,18 @@ function clearWorking() {
     spinnerTimer = null;
   }
 }
+function copyOutput(){
+  const pre=document.getElementById('output');
+  if(!pre) return;
+  // Retrieve raw text by stripping span tags if present
+  let text='';
+  if(pre.querySelector('span')){ text = pre.textContent; } else { text = pre.textContent || ''; }
+  navigator.clipboard.writeText(text).then(()=>flashCopyStatus('Copied')).catch(()=>flashCopyStatus('Copy failed'));
+}
+function flashCopyStatus(msg){
+  const el=document.getElementById('copyStatus'); if(!el) return;
+  el.textContent=msg; setTimeout(()=>{ if(el.textContent===msg) el.textContent=''; }, 1600);
+}
 function out(obj) {
   clearWorking();
   const el = document.getElementById('output');

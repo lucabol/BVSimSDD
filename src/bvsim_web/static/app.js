@@ -426,23 +426,22 @@ async function uploadTeam() {
   } catch (e) { out(e.message); }
 }
 
-// Open a team into editor
-async function openTeam(file) {
-  if (!file) return;
+// --- Modal Team Editor ---
+function showTeamModal(){ const m=document.getElementById('teamEditorModal'); if(m) m.style.display='flex'; }
+function closeTeamModal(){ const m=document.getElementById('teamEditorModal'); if(m) m.style.display='none'; }
+
+async function openTeam(file){
+  if(!file) return;
   try {
     const data = await api(`/api/teams/${encodeURIComponent(file)}`);
     const ed = document.getElementById('teamEditor');
+    if(!ed) return;
     ed.value = data.content || '';
     ed.dataset.filename = data.file;
+    const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = data.file;
     setTeamEditStatus(`Loaded ${data.file}`);
+    showTeamModal();
   } catch(e){ setTeamEditStatus(e.message, true); }
-}
-
-function clearEditor(){
-  const ed = document.getElementById('teamEditor');
-  ed.value='';
-  delete ed.dataset.filename;
-  setTeamEditStatus('Editor cleared');
 }
 
 async function saveTeamEdit(){
@@ -457,13 +456,13 @@ async function saveTeamEdit(){
 }
 
 async function deleteTeam(file){
-  if (!file) return;
-  if (!confirm(`Delete ${file}?`)) return;
+  if(!file) return;
+  if(!confirm(`Delete ${file}?`)) return;
   try {
     const res = await api(`/api/teams/${encodeURIComponent(file)}`, { method: 'DELETE' });
     setTeamEditStatus(`Deleted ${res.file}`);
     const ed = document.getElementById('teamEditor');
-    if (ed.dataset.filename === file) clearEditor();
+    if(ed && ed.dataset.filename === file){ ed.value=''; delete ed.dataset.filename; }
     refreshTeams();
   } catch(e){ setTeamEditStatus(e.message, true); }
 }
@@ -473,17 +472,15 @@ function downloadTeam(file){
   window.open(`/api/teams/${encodeURIComponent(file)}/download`, '_blank');
 }
 
-function downloadCurrentTeam(){
-  const ed = document.getElementById('teamEditor');
-  if(!ed.dataset.filename) return setTeamEditStatus('No team loaded', true);
-  downloadTeam(ed.dataset.filename);
-}
+function downloadCurrentTeam(){ const ed=document.getElementById('teamEditor'); if(!ed || !ed.dataset.filename) return setTeamEditStatus('No team loaded', true); downloadTeam(ed.dataset.filename); }
 
-function setTeamEditStatus(msg, isError){
-  const el = document.getElementById('teamEditStatus');
-  if(!el) return;
-  el.textContent = msg;
-  el.style.color = isError ? '#b71c1c' : '#4a5b6d';
+function setTeamEditStatus(msg,isError){ const el=document.getElementById('teamEditStatus'); if(!el) return; el.textContent=msg; el.style.color=isError?'#b71c1c':'#4a5b6d'; }
+
+function formatTeamYaml(){
+  const ed=document.getElementById('teamEditor'); if(!ed || !ed.value.trim()) return;
+  // Placeholder: could integrate js-yaml client-side; for now just trims trailing spaces
+  ed.value = ed.value.split('\n').map(l=>l.replace(/\s+$/,'')).join('\n');
+  setTeamEditStatus('Whitespace trimmed');
 }
 
 async function simulateCommon(opts) {

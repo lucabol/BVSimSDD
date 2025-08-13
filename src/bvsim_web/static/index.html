@@ -141,11 +141,8 @@ table.match-impact caption { caption-side:bottom; padding:6px 4px; font-size:.6r
         </div>
         <div class="flex-row">
           <button onclick="createTeamEnhanced()">Add Team</button>
-          <div style="display:flex; flex-direction:column; gap:4px;">
-            <label style="margin:0">Upload</label>
-            <input type="file" id="uploadTeamFile" accept=".yaml,.yml" style="padding:3px;" />
-          </div>
-          <button class="secondary" onclick="uploadTeam()">Upload</button>
+          <input type="file" id="uploadTeamFile" accept=".yaml,.yml" style="display:none;" />
+          <button class="secondary" onclick="triggerTeamUpload()">Upload</button>
         </div>
         <label style="margin-top:4px">Teams</label>
         <ul class="team-list" id="teamList"></ul>

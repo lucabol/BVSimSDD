@@ -412,12 +412,24 @@ async function createTeamEnhanced() {
   } catch(e){ out(e.message); }
 }
 
-async function uploadTeam() {
-  startWorking('Uploading team');
+function triggerTeamUpload(){
   const input = document.getElementById('uploadTeamFile');
-  if (!input.files.length) return out('Choose a file');
+  if(!input) return;
+  input.value=''; // reset so selecting same file again still triggers change
+  input.onchange = () => {
+    if(input.files && input.files.length){
+      uploadTeam(input.files[0]);
+    }
+  };
+  input.click();
+}
+
+async function uploadTeam(file) {
+  const f = file;
+  if(!f){ return out('No file selected'); }
+  startWorking('Uploading team');
   const form = new FormData();
-  form.append('file', input.files[0]);
+  form.append('file', f);
   try {
     const res = await fetch('/api/teams/upload', { method: 'POST', body: form });
     if (!res.ok) throw new Error(await res.text());

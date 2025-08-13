@@ -333,6 +333,27 @@ function initAceTeamEditor(attempt=0){
   window.teamYamlEditor = editor;
 }
 window.addEventListener('DOMContentLoaded', ()=>initAceTeamEditor());
+
+// Global toggle for showing/hiding the controls pane grid
+function toggleControlsVisibility(){
+  const controls = document.getElementById('controls');
+  const btn = document.getElementById('globalToggleControls');
+  if(!controls || !btn) return;
+  const hidden = controls.classList.toggle('is-hidden');
+  // Apply inline style (grid -> none) to avoid layout shift flicker
+  if(hidden){
+    controls.style.display = 'none';
+  } else {
+    controls.style.display = 'grid';
+  }
+  // Swap icon and text
+  const use = btn.querySelector('use');
+  const labelSpan = btn.querySelector('.btn-label');
+  if(use){ use.setAttribute('href', hidden ? '#icon-expand' : '#icon-collapse'); }
+  if(labelSpan){ labelSpan.textContent = hidden ? 'Show Controls' : 'Hide Controls'; }
+  // Accessibility attributes
+  btn.setAttribute('aria-expanded', String(!hidden));
+}
 </script>
 </body>
 </html>

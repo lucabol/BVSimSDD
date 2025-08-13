@@ -440,6 +440,22 @@ async function refreshTeams() {
         if (prev && Array.from(sel.options).some(o=>o.value===prev)) sel.value=prev; else sel.value='';
       });
     }
+    // Populate compare multi select
+    const compareSel = document.getElementById('compareTeams');
+    if (compareSel) {
+      // Preserve previously selected values
+      const prevSelected = Array.from(compareSel.selectedOptions).map(o=>o.value);
+      compareSel.innerHTML='';
+      const basicOpt = document.createElement('option'); basicOpt.value='Basic'; basicOpt.textContent='Basic'; compareSel.appendChild(basicOpt);
+      const advOpt = document.createElement('option'); advOpt.value='Advanced'; advOpt.textContent='Advanced'; compareSel.appendChild(advOpt);
+      if (data.teams.length) {
+        // Add disabled separator like other selects (cannot use <optgroup> because of styling simplicity) 
+        const sep = document.createElement('option'); sep.disabled=true; sep.textContent='── Available Teams ──'; compareSel.appendChild(sep);
+      }
+      data.teams.forEach(t=> { if(!t.file) return; const o=document.createElement('option'); o.value=t.file; o.textContent=t.name || t.file; compareSel.appendChild(o); });
+      // Re-select prior items where possible
+      Array.from(compareSel.options).forEach(o=> { if (prevSelected.includes(o.value)) o.selected=true; });
+    }
     // Populate base select with current teams
     const baseSel = document.getElementById('newTeamBase');
     if (baseSel) {
@@ -644,16 +660,22 @@ async function compareCommon(opts) {
   startWorking('Comparing teams');
   setCompareStatus('Running comparison...', true);
   try {
-    const raw = document.getElementById('compareTeams').value;
-    const teams = raw.split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-      .map(s => {
-        const lowered = s.toLowerCase();
-        if (lowered === 'basic') return 'Basic';
-        if (lowered === 'advanced') return 'Advanced';
-        return s; // pass through (file or existing team)
-      });
+    const selEl = document.getElementById('compareTeams');
+    let teams = [];
+    if (selEl) {
+      teams = Array.from(selEl.selectedOptions)
+        .filter(o => !o.disabled)
+        .map(o => o.value)
+        .filter(v => v && v.trim())
+        .map(v => {
+          const lowered = v.toLowerCase();
+          if (lowered === 'basic') return 'Basic';
+          if (lowered === 'advanced') return 'Advanced';
+          return v; // file name
+        });
+    }
+    if (!teams.length) { setCompareStatus('Select at least two teams', false); out('Select at least two teams'); return; }
+    if (teams.length < 2) { setCompareStatus('Need 2+ teams', false); out('Need at least two teams to compare'); return; }
     const payload = Object.assign({ teams }, opts);
     const res = await api('/api/compare', { method: 'POST', body: JSON.stringify(payload) });
     out(res);

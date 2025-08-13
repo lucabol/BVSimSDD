@@ -41,6 +41,8 @@ section.card.collapsed .section-body { display:none; }
 label { display:block; font-size:.68rem; font-weight:600; color:#26435f; letter-spacing:.5px; }
 input, select, textarea { width:100%; padding:5px 7px; font-size:.72rem; border:1px solid var(--color-border-subtle); border-radius:var(--radius-sm); background:#f8fafc; font-family:inherit; }
 input:focus, select:focus, textarea:focus { outline:2px solid var(--color-brand-accent); background:#fff; }
+/* Multi-select specific */
+select[multiple] { height:auto; overflow:auto; }
 /* UTIL FLEX */
 .flex-row { display:flex; gap:6px; }
 .flex-row > * { flex:1; }
@@ -233,8 +235,9 @@ ul.team-list li:hover { background:#f1f5f9; }
         <h2>Compare</h2>
       </header>
       <div class="section-body">
-        <label>Teams (comma separated)</label>
-        <input id="compareTeams" placeholder="team_a.yaml,team_b.yaml" />
+  <label for="compareTeams">Select Teams (multi)</label>
+  <select id="compareTeams" multiple size="6" aria-describedby="compareTeamsHelp" style="min-height:110px;"></select>
+  <div id="compareTeamsHelp" class="note">Hold Ctrl/Command (desktop) to select multiple. Include 2+ teams. Basic/Advanced templates available.</div>
         <div class="btn-group">
           <button onclick="compareTeamsRun()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-compare"/></svg><span>Compare</span></button>
           <button onclick="compareQuick()" class="btn btn--secondary" title="Quick"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg><span>Quick</span></button>

@@ -22,7 +22,7 @@ def list_team_files() -> List[Path]:
     files: List[Path] = []
     seen: set[str] = set()
     include_tests = os.getenv('BVSIM_INCLUDE_TEST_TEAMS') == '1'
-    hidden_name_fragments = { 'webtestteam', 'sample_team_a', 'sample_team_b' }
+    hidden_name_fragments = { 'webtestteam', 'sample_team_a', 'sample_team_b', 'soloteamx', 'test_scenario' }
     # Directories to search: project root (cwd), optional tests/data/teams for curated test fixtures
     search_dirs = [Path.cwd()]
     test_teams_dir = Path.cwd() / 'tests' / 'data' / 'teams'

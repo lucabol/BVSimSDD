@@ -1,0 +1,3 @@
+include README.md
+graft src/bvsim_web/static
+recursive-include src/bvsim_web/static *.*

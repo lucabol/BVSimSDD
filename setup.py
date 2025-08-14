@@ -24,29 +24,8 @@ setup(
     long_description_content_type="text/markdown",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    classifiers=[
-        "Development Status :: 4 - Beta",
-        "Intended Audience :: Developers",
-        "Intended Audience :: Science/Research",
-        "Topic :: Scientific/Engineering :: Information Analysis",
-        "Topic :: Games/Entertainment :: Simulation",
-        "License :: OSI Approved :: MIT License",
-        "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-    ],
-    python_requires=">=3.8",
-    install_requires=[
-        "pyyaml>=5.1",
-    ],
-    entry_points={
-        "console_scripts": [
-            "bvsim=bvsim.cli:main",
-            # Expose high-level CLI module for compare-teams and other commands
-            "bvsim-cli=bvsim_cli.cli:main",
-        ],
+    package_data={
+        "bvsim_web": ["static/**/*", "static/*"],
     },
     include_package_data=True,
     zip_safe=False,

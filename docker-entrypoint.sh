@@ -19,7 +19,7 @@ if [ -d "$TEMPLATE_SRC" ]; then
 fi
 
 # Ensure data directories exist
-mkdir -p /data /data/teams
+mkdir -p /data
 
 # Start Gunicorn
 exec gunicorn "bvsim_web:create_app()" \

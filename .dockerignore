@@ -1,15 +1,16 @@
-.git
+# Exclude local venvs and dev artifacts
+.venv/
+venv/
+env/
+ENV/
+.git/
 .gitignore
-__pycache__/
-*.pyc
+**/__pycache__/
+*.py[cod]
 *.pyo
 *.pyd
 *.pytest_cache/
-.dist/
-.build/
-.venv/
-env/
-venv/
-.idea/
-.vscode/
-tests/
+*.mypy_cache/
+.coverage
+dist/
+build/

@@ -9,19 +9,23 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     BVSIM_WEB_DEBUG=0
 
 # System deps (add more if needed by libs)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get update \
+ && apt-get install -y --no-install-recommends \
+     build-essential tzdata ca-certificates curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Build/install app
 WORKDIR /app
+
+# Install runtime deps via requirements.txt (cache-friendly)
+COPY requirements.txt /app/requirements.txt
+RUN pip install --upgrade pip \
+ && pip install -r /app/requirements.txt
+
+# Then copy package sources and install the package
 COPY setup.py README.md /app/
 COPY src/ /app/src/
-
-# Runtime deps, then install package
-RUN pip install --upgrade pip \
- && pip install "flask>=2.2" gunicorn pyyaml \
- && pip install .
+RUN pip install .
 
 # Bake templates and entrypoint; data dir used at runtime
 COPY templates/ /opt/bvsim-templates/

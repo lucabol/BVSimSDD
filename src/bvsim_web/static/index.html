@@ -12,6 +12,7 @@
 body { font-family:system-ui,sans-serif; margin:0; padding:0; background:var(--color-bg); color:var(--color-text); }
 header { background:var(--color-brand); color:#fff; padding:10px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; }
 header h1 { font-size:1.05rem; margin:0; font-weight:600; letter-spacing:.5px; display:flex; align-items:center; gap:.55rem; }
+header .header-actions { display:flex; gap:6px; align-items:center; }
 main { padding:14px 16px 32px; }
 /* BUTTONS */
 .btn { --_bg:var(--color-brand-accent); --_bg-hover:#115fa3; --_color:#fff; --_ring:var(--color-brand-accent); cursor:pointer; display:inline-flex; align-items:center; gap:.45em; border:1px solid transparent; background:var(--_bg); color:var(--_color); font-size:var(--font-size-btn); font-weight:600; letter-spacing:.5px; padding:6px 10px; border-radius:var(--radius-sm); line-height:1.1; position:relative; text-decoration:none; user-select:none; transition:background var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast); }
@@ -133,13 +134,27 @@ ul.team-list li:hover { background:#f1f5f9; }
 /* Ace Editor (CDN) */
 #teamEditor { font-family:ui-monospace,monospace; }
 #aceTeamEditor { position:relative; width:100%; height:320px; border:1px solid #1e2d3e; border-radius:8px; font-size:12px; }
+/* HELP MODAL */
+#helpModal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(13,25,38,0.55); z-index:600; }
+#helpModal .modal-card { background:#fff; width:min(920px, 92vw); max-height:86vh; display:flex; flex-direction:column; border-radius:12px; box-shadow:0 6px 18px -4px rgba(0,0,0,.3); border:1px solid #0d47a1; }
+#helpModal .modal-head { padding:10px 14px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#0d47a1,#1669c1); color:#fff; border-top-left-radius:12px; border-top-right-radius:12px; }
+#helpModal .modal-head strong { font-size:.78rem; letter-spacing:.5px; }
+#helpModal .modal-body { padding:12px 14px; overflow:auto; }
+#helpModal h3 { margin:.4rem 0 .2rem; font-size:.9rem; color:#0d305f; }
+#helpModal p, #helpModal li { font-size:.78rem; color:#34495e; line-height:1.35; }
+#helpModal ul { margin:.2rem 0 .6rem 1.1rem; }
 </style>
 <!-- Remove CodeMirror scripts -->
 </head>
 <body>
 <header>
   <h1><svg class="icon-inline" aria-hidden="true"><use href="#icon-volleyball"/></svg> BVSim Web Interface</h1>
-  <button id="globalToggleControls" class="btn btn--ghost btn--sm" type="button" onclick="toggleControlsVisibility()"><svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Hide Controls</span></button>
+  <div class="header-actions">
+    <button id="openHelpBtn" class="btn btn--ghost btn--sm" type="button" title="How to use" aria-label="Open help" onclick="openHelpModal()">
+      <svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg><span class="btn-label">Info</span>
+    </button>
+    <button id="globalToggleControls" class="btn btn--ghost btn--sm" type="button" onclick="toggleControlsVisibility()"><svg class="icon" aria-hidden="true"><use href="#icon-collapse"/></svg><span class="btn-label">Hide Controls</span></button>
+  </div>
 </header>
 <main>
   <!-- SVG ICON SPRITE -->
@@ -162,6 +177,7 @@ ul.team-list li:hover { background:#f1f5f9; }
     <symbol id="icon-expand" viewBox="0 0 24 24"><path fill="currentColor" d="M7 9h10l-5 6-5-6Z"/></symbol>
     <symbol id="icon-volleyball" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.7 5.02L12 12.5V2Zm8.7 5.02A10 10 0 0 0 12 2v10.5l8.7-5.48ZM4 9.27V12a8 8 0 0 0 4.62 7.24l1.54-2.67L4 9.27Zm6.16 9.3A8 8 0 0 0 20 12V9.27l-9.38 5.43-.46.8Z"/></symbol>
   <symbol id="icon-copy" viewBox="0 0 24 24"><path fill="currentColor" d="M16 1H4a2 2 0 0 0-2 2v14h2V3h12V1Zm3 4H8a2 2 0 0 0-2 2v16h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm0 18H8V7h11v16Z"/></symbol>
+  <symbol id="icon-info" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></symbol>
   </svg>
   <div id="controls">
     <section id="teams" class="card">
@@ -345,6 +361,65 @@ ul.team-list li:hover { background:#f1f5f9; }
     </div>
   </div>
 </div>
+<!-- Help / Info Modal -->
+<div id="helpModal" role="dialog" aria-modal="true" aria-labelledby="helpModalTitle">
+  <div class="modal-card" role="document">
+    <div class="modal-head">
+      <strong id="helpModalTitle">How to use BVSim Web</strong>
+      <button type="button" class="btn btn--ghost btn--sm" onclick="closeHelpModal()"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg><span>Close</span></button>
+    </div>
+    <div class="modal-body">
+      <h3>Core idea: probabilities define a team</h3>
+      <p>A Beach Volley team here is modeled as a set of probabilities for each skill and outcome: serving (ace/error/in-play), reception (excellent/good/OK/error), setting, attack (kill/error/defended), block, and defense. By editing those probabilities you create different team profiles and see how they perform.</p>
+
+      <h3>Teams</h3>
+      <ul>
+        <li>Create or upload teams with YAML. Use Basic/Advanced templates as a starting point.</li>
+        <li>Select a team to view/edit its YAML; save to update the server copy.</li>
+        <li>Team files live as YAML so they’re portable and versionable.</li>
+      </ul>
+
+      <h3>Rallies</h3>
+      <ul>
+        <li>Generate example rallies between two teams to see step-by-step how a rally unfolds from serve to result.</li>
+        <li>The timeline shows actions (Serve, Reception, Set, Attack, Block/Defense) with qualities and the rally winner.</li>
+      </ul>
+
+      <h3>Simulate</h3>
+      <ul>
+        <li>Pick Team A vs Team B and run a match simulation for a number of points.</li>
+        <li>Quick is faster with fewer samples; Accurate runs more samples for tighter confidence.</li>
+        <li>Results appear in the Output pane and chart.</li>
+      </ul>
+
+      <h3>Skills (what-if)</h3>
+      <ul>
+        <li>Analyze how improving a specific team’s skills by a percentage might change win probability vs an opponent.</li>
+        <li>Outputs include estimated impact with confidence intervals.</li>
+      </ul>
+
+      <h3>Scenarios</h3>
+      <ul>
+        <li>Select scenario YAMLs (variants of a base team) to compare how tweaks affect performance.</li>
+        <li>Team plays vs itself under different parameter sets to isolate changes.</li>
+      </ul>
+
+      <h3>Round Robin</h3>
+      <ul>
+        <li>Select multiple teams to run a round-robin tournament and compare win rates/rankings.</li>
+      </ul>
+
+      <h3>Outputs</h3>
+      <ul>
+        <li>Chart pane: visual summaries (impacts, win rates, rankings) and rallies visualization.</li>
+        <li>JSON Output: full raw results for copying or downstream analysis.</li>
+      </ul>
+
+      <p class="note">Tip: Use the Info button anytime. You can also hide the Controls to focus on results.</p>
+    </div>
+  </div>
+  <button class="sr-only" onclick="closeHelpModal()">Close help</button>
+</div>
 <footer>
   BVSim Web MVP - Generated interface. Edit YAML files directly to fine-tune probabilities.
 </footer>
@@ -393,6 +468,46 @@ function toggleControlsVisibility(){
   // Accessibility attributes
   btn.setAttribute('aria-expanded', String(!hidden));
 }
+
+// Help modal controls
+function openHelpModal(){
+  const modal = document.getElementById('helpModal');
+  if(!modal) return;
+  modal.style.display = 'flex';
+  // prevent background scroll on mobile
+  document.body.style.overflow = 'hidden';
+  // focus first interactive element for a11y
+  const closeBtn = modal.querySelector('.modal-head button');
+  if(closeBtn) closeBtn.focus();
+}
+
+function closeHelpModal(){
+  const modal = document.getElementById('helpModal');
+  if(!modal) return;
+  modal.style.display = 'none';
+  document.body.style.overflow = '';
+  const opener = document.getElementById('openHelpBtn');
+  if(opener) opener.focus();
+}
+
+// Close on backdrop click
+document.addEventListener('click', (e)=>{
+  const modal = document.getElementById('helpModal');
+  if(!modal || modal.style.display === 'none') return;
+  if(e.target === modal){
+    closeHelpModal();
+  }
+});
+
+// Close on Escape key
+document.addEventListener('keydown', (e)=>{
+  if(e.key === 'Escape'){
+    const modal = document.getElementById('helpModal');
+    if(modal && modal.style.display !== 'none'){
+      closeHelpModal();
+    }
+  }
+});
 </script>
 </body>
 </html>

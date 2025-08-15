@@ -16,6 +16,7 @@ SETLOCAL ENABLEDELAYEDEXPANSION
 REM Resolve script directory
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+pushd "%SCRIPT_DIR%" >nul
 
 REM Ensure src on PYTHONPATH so module imports work when run from Explorer
 set "PYTHONPATH=%SCRIPT_DIR%\src;%PYTHONPATH%"
@@ -65,6 +66,7 @@ if %errorlevel% equ 0 goto :EOF
 echo ERROR: Could not start BVSim web (Python not found?).
 echo Tried: py, python3, python.
 echo Ensure Python 3 is installed and on PATH.
+popd >nul
 exit /b 1
 
 ENDLOCAL

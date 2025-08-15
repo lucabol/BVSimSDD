@@ -14,6 +14,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# Ensure local src is on PYTHONPATH so `python -m bvsim_web` works without install
+export PYTHONPATH="$SCRIPT_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+
 # Allow simple positional overrides
 if [[ ${1:-} =~ ^[0-9]+$ ]]; then
   export BVSIM_WEB_PORT="$1"; shift || true
@@ -28,11 +31,11 @@ fi
 
 # Decide runner: prefer gunicorn if multiple workers requested and available
 if [[ -n "${BVSIM_WEB_WORKERS:-}" ]]; then
-  if python -c "import gunicorn" 2>/dev/null; then
-    exec python -m gunicorn -w "${BVSIM_WEB_WORKERS}" -b "${BVSIM_WEB_HOST}:${BVSIM_WEB_PORT}" 'bvsim_web.__main__:app'
+  if python3 -c "import gunicorn" 2>/dev/null; then
+  exec python3 -m gunicorn -w "${BVSIM_WEB_WORKERS}" -b "${BVSIM_WEB_HOST}:${BVSIM_WEB_PORT}" 'bvsim_web.__main__:app'
   else
     echo "[INFO] gunicorn not installed; falling back to Flask dev server." >&2
   fi
 fi
 
-exec python -m bvsim_web
+exec python3 -m bvsim_web

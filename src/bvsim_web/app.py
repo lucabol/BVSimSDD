@@ -541,7 +541,7 @@ def register_routes(app: Flask) -> None:
             from concurrent.futures import ThreadPoolExecutor
             # Keep the interactive skills view fast by default. Multi-run
             # inference remains available when the caller explicitly requests it.
-            num_runs = int(runs or (5 if custom_files else 1))
+            num_runs = int(runs or 1)
             if num_runs < 1:
                 raise ValueError("runs must be at least 1")
             master_seed = (

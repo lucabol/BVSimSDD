@@ -246,6 +246,10 @@ ul.team-list li:hover { background:#f1f5f9; }
   <select id="skillsOpponent"></select>
         <label>Improve (e.g. 5% or 0.05)</label>
         <input id="skillsImprove" placeholder="5%" />
+        <div class="flex-row">
+          <div><label>Points per test</label><input id="skillsPoints" type="number" min="1" placeholder="default" /></div>
+          <div><label>Runs</label><input id="skillsRuns" type="number" min="1" value="1" /></div>
+        </div>
         <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="skillsAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>
@@ -267,6 +271,10 @@ ul.team-list li:hover { background:#f1f5f9; }
         <label for="scenarioFiles">Select Scenario Files (multi)</label>
         <select id="scenarioFiles" multiple size="6" aria-describedby="scenarioFilesHelp" style="min-height:110px;"></select>
   <div id="scenarioFilesHelp" class="note">Hold Ctrl/Command to choose multiple scenario YAML team variant files (root directory *.yaml). Team plays vs itself.</div>
+        <div class="flex-row">
+          <div><label>Points per variant</label><input id="scenariosPoints" type="number" min="1" placeholder="default" /></div>
+          <div><label>Runs</label><input id="scenariosRuns" type="number" min="1" value="1" /></div>
+        </div>
   <!-- Removed redundant Improve field (not used in scenario variant comparisons) -->
         <div class="actions-bottom">
         <div class="btn-group">
@@ -287,6 +295,8 @@ ul.team-list li:hover { background:#f1f5f9; }
   <label for="compareTeams">Select Teams (multi)</label>
   <select id="compareTeams" multiple size="6" aria-describedby="compareTeamsHelp" style="min-height:110px;"></select>
   <div id="compareTeamsHelp" class="note">Hold Ctrl/Command (desktop) to select multiple. Include 2+ teams. Basic/Advanced templates available.</div>
+        <label>Points per matchup</label>
+        <input id="comparePoints" type="number" min="1" placeholder="default" />
         <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="compareTeamsRun()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-compare"/></svg><span>Analyze</span></button>

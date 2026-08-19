@@ -152,8 +152,15 @@ function renderMatchImpactChart(stat) {
     const topSkills = skills; // now show all parameters
     const labels = topSkills.map(s=> s.parameter);
     const means = topSkills.map(s=> s.match.mean);
-    const lowers = topSkills.map(s=> s.match.lower);
-    const uppers = topSkills.map(s=> s.match.upper);
+    const intervalAvailable = topSkills.map(
+      s => s.match.lower != null && s.match.upper != null
+    );
+    const lowers = topSkills.map(
+      (s, i) => intervalAvailable[i] ? s.match.lower : s.match.mean
+    );
+    const uppers = topSkills.map(
+      (s, i) => intervalAvailable[i] ? s.match.upper : s.match.mean
+    );
     const significant = topSkills.map(s=> !!s.significant);
 
   // Dynamic height per skill
@@ -186,7 +193,7 @@ function renderMatchImpactChart(stat) {
       type:'scatter',
       data:{ datasets:[{ label:'Match Win Rate Δ % (mean)', data: means.map((m,i)=>({x:m,y:labels[i]})), showLine:false, pointRadius:5, pointHoverRadius:7, pointBackgroundColor: means.map((v,i)=> significant[i] ? (v>=0?'#1976d2':'#c62828') : (v>=0?'#64b5f6':'#ef9a9a')), pointBorderColor: means.map(v=> v>=0?'#0d47a1':'#b71c1c'), pointBorderWidth:1.5 }]},
       options:{ responsive:true, maintainAspectRatio:false, animation:false, parsing:false,
-        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=> items[0].raw && items[0].raw.y, label:(ctx)=>{ const i=ctx.dataIndex; const mean=means[i]; const lo=lowers[i]; const hi=uppers[i]; const sig=significant[i]?' (significant)':''; return `${mean>=0?'+':''}${mean.toFixed(2)}%  CI [${lo>=0?'+':''}${lo.toFixed(2)}%, ${hi>=0?'+':''}${hi.toFixed(2)}%]${sig}`; } } }, title:{display:true,text:'Match Win Rate Impact (mean & 95% CI)'} },
+        plugins:{ legend:{display:false}, tooltip:{ callbacks:{ title:(items)=> items[0].raw && items[0].raw.y, label:(ctx)=>{ const i=ctx.dataIndex; const mean=means[i]; if(!intervalAvailable[i]) return `${mean>=0?'+':''}${mean.toFixed(2)}% (CI unavailable for one run)`; const lo=lowers[i]; const hi=uppers[i]; const sig=significant[i]?' (significant)':''; return `${mean>=0?'+':''}${mean.toFixed(2)}%  CI [${lo>=0?'+':''}${lo.toFixed(2)}%, ${hi>=0?'+':''}${hi.toFixed(2)}%]${sig}`; } } }, title:{display:true,text:intervalAvailable.some(Boolean)?'Match Win Rate Impact (mean & CI)':'Match Win Rate Impact (single-run estimate)'} },
         scales:{
           x:{ title:{display:true,text:'Δ Win Rate %'}, min:xMin, max:xMax, ticks:{ callback:v=> (v>0?'+':'')+v+'%' } },
           y:{ type:'category', labels, offset:true, grid:{display:false}, ticks:{ padding:15, autoSkip:false, font:{ size:13 }, maxRotation:0, minRotation:0 } }
@@ -230,11 +237,11 @@ function renderMatchImpactChart(stat) {
         return `<tr class="${cls}">`+
           `<td>${s.parameter}</td>`+
           (hasPoint? `<td>${pMean!==undefined? (pMean>=0?'+':'')+pMean.toFixed(2)+'%':''}</td>`: '')+
-          (hasPoint? `<td>${pLower!==undefined? (pLower>=0?'+':'')+pLower.toFixed(2)+'%':''}</td>`: '')+
-          (hasPoint? `<td>${pUpper!==undefined? (pUpper>=0?'+':'')+pUpper.toFixed(2)+'%':''}</td>`: '')+
+          (hasPoint? `<td>${pLower!=null? (pLower>=0?'+':'')+pLower.toFixed(2)+'%':'N/A'}</td>`: '')+
+          (hasPoint? `<td>${pUpper!=null? (pUpper>=0?'+':'')+pUpper.toFixed(2)+'%':'N/A'}</td>`: '')+
           `<td>${m.mean!==undefined? (m.mean>=0?'+':'')+m.mean.toFixed(2)+'%':''}</td>`+
-          `<td>${m.lower!==undefined? (m.lower>=0?'+':'')+m.lower.toFixed(2)+'%':''}</td>`+
-          `<td>${m.upper!==undefined? (m.upper>=0?'+':'')+m.upper.toFixed(2)+'%':''}</td>`+
+          `<td>${m.lower!=null? (m.lower>=0?'+':'')+m.lower.toFixed(2)+'%':'N/A'}</td>`+
+          `<td>${m.upper!=null? (m.upper>=0?'+':'')+m.upper.toFixed(2)+'%':'N/A'}</td>`+
           `<td>${s.significant? (sig==='pos'?'Yes (+)':'Yes (-)'):'No'}</td>`+
         `</tr>`; }).join('');
       const headerPoint = hasPoint ? `<th colspan="3">Point Impact 95% CI</th>` : '';
@@ -705,10 +712,14 @@ async function skillsCommon(opts) {
     const team = document.getElementById('skillsTeam').value.trim();
     const opponent = document.getElementById('skillsOpponent').value.trim();
     const improve = document.getElementById('skillsImprove').value.trim();
+    const points = document.getElementById('skillsPoints').value;
+    const runs = document.getElementById('skillsRuns').value;
     const payload = Object.assign({}, opts);
     if (team) payload.team = team;
     if (opponent) payload.opponent = opponent;
     if (improve) payload.improve = improve;
+    if (points) payload.points = parseInt(points, 10);
+    if (runs) payload.runs = parseInt(runs, 10);
     const res = await api('/api/skills', { method: 'POST', body: JSON.stringify(payload) });
     out(res); // keep textual JSON in collapsible output
     if (res && res.statistical_analysis && res.parameters?.runs > 1 &&
@@ -773,7 +784,11 @@ async function scenarioCommon(opts){
     let custom = [];
     if(fileSel){ custom = Array.from(fileSel.selectedOptions).map(o=>o.value).filter(Boolean); }
     if(!custom.length){ setScenariosStatus('Select scenario files', false); out('No scenario files selected'); return; }
+    const points = document.getElementById('scenariosPoints').value;
+    const runs = document.getElementById('scenariosRuns').value;
     const payload = Object.assign({ custom }, opts);
+    if(points) payload.points = parseInt(points, 10);
+    if(runs) payload.runs = parseInt(runs, 10);
   if(team) payload.team = team; if(opponent) payload.opponent = opponent; // no improve field for scenarios
     const res = await api('/api/skills', { method:'POST', body: JSON.stringify(payload) });
     out(res);
@@ -782,7 +797,7 @@ async function scenarioCommon(opts){
       renderMatchImpactChart(res);
       const paneTitle = document.getElementById('chartPaneTitle');
       if(paneTitle){ const pts = res.parameters?.points; paneTitle.textContent = `Scenarios (CI): ${res.skills.length} variants (${fmtInt(pts)} pts/run, runs ${res.parameters?.runs||5})`; }
-      setTimeout(()=>{ const legendEl=document.getElementById('matchImpactLegend'); if(legendEl && res.baseline){ const b=res.baseline; const note=document.createElement('div'); note.style.fontSize='.6rem'; note.textContent=`Baseline win rate ${b.mean.toFixed(2)}% [${b.lower.toFixed(2)}%, ${b.upper.toFixed(2)}%].`; legendEl.appendChild(note);} },60);
+      setTimeout(()=>{ const legendEl=document.getElementById('matchImpactLegend'); if(legendEl && res.baseline){ const b=res.baseline; const interval = b.lower == null || b.upper == null ? 'CI unavailable for one run' : `CI [${b.lower.toFixed(2)}%, ${b.upper.toFixed(2)}%]`; const note=document.createElement('div'); note.style.fontSize='.6rem'; note.textContent=`Baseline win rate ${b.mean.toFixed(2)}% (${interval}).`; legendEl.appendChild(note);} },60);
     } else if(res && res.results && res.results.file_results){
       // Fallback single-run structure (no CI)
       const fileResults = res.results.file_results; const baseline = res.results.baseline_win_rate;
@@ -817,7 +832,9 @@ async function compareCommon(opts) {
     }
     if (!teams.length) { setCompareStatus('Select at least two teams', false); out('Select at least two teams'); return; }
     if (teams.length < 2) { setCompareStatus('Need 2+ teams', false); out('Need at least two teams to compare'); return; }
+    const points = document.getElementById('comparePoints').value;
     const payload = Object.assign({ teams }, opts);
+    if (points) payload.points = parseInt(points, 10);
     const res = await api('/api/compare', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
   clearMatchImpactDisplay();

@@ -63,7 +63,7 @@ def test_simulate_one_blank_other_basic(client):
 def test_skills_blank_defaults(client):
     rv = client.post(
         '/api/skills',
-        json={"points": 20, "runs": 1, "seed": 123},
+        json={"points": 20, "seed": 123},
     )
     assert rv.status_code == 200
     data = rv.get_json()
@@ -71,9 +71,9 @@ def test_skills_blank_defaults(client):
     assert data['teams']['team'] == 'Team A'
     assert data['teams']['opponent'] == 'Team B'
     assert data['parameters']['master_seed'] == 123
+    assert data['parameters']['runs'] == 1
     assert data['effect_statistics'][0]['point_lower'] is None
-    assert len(data['holdout_statistics']) == 3
-    assert data['holdout_statistics'][0]['adjusted_p_value'] is None
+    assert data['holdout_statistics'] == []
 
 def test_skills_one_blank_other_basic(client):
     rv = client.post(
@@ -132,3 +132,19 @@ def test_skills_quick(client):
     assert rv.status_code == 200
     data = rv.get_json()
     assert 'results' in data
+
+
+def test_skills_explicit_multi_run_includes_holdout(client):
+    rv = client.post(
+        '/api/skills',
+        json={"points": 20, "runs": 2, "seed": 456},
+    )
+
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert data['parameters']['runs'] == 2
+    assert len(data['holdout_statistics']) == 3
+    assert all(
+        row['adjusted_p_value'] is not None
+        for row in data['effect_statistics']
+    )

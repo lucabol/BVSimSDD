@@ -539,7 +539,9 @@ def register_routes(app: Flask) -> None:
             else:
                 change_value = 0.05
             from concurrent.futures import ThreadPoolExecutor
-            num_runs = int(runs or 5)
+            # Keep the interactive skills view fast by default. Multi-run
+            # inference remains available when the caller explicitly requests it.
+            num_runs = int(runs or (5 if custom_files else 1))
             if num_runs < 1:
                 raise ValueError("runs must be at least 1")
             master_seed = (
@@ -584,31 +586,33 @@ def register_routes(app: Flask) -> None:
                     Path(file_name).stem: file_name
                     for file_name in clean_files
                 }
-                holdout_files = [
-                    file_by_stem[effect["name"]]
-                    for effect in sorted(
-                        effect_statistics,
-                        key=lambda effect: effect["match_mean"],
-                        reverse=True,
-                    )[:3]
-                ]
-                def run_holdout(run_seed):
-                    return multi_team_skill_analysis(
-                        base_team=team,
-                        opponent=opponent,
-                        team_variant_files=holdout_files,
-                        points_per_test=points_per_test,
-                        seed=run_seed,
+                holdout_statistics = []
+                if num_runs > 1:
+                    holdout_files = [
+                        file_by_stem[effect["name"]]
+                        for effect in sorted(
+                            effect_statistics,
+                            key=lambda effect: effect["match_mean"],
+                            reverse=True,
+                        )[:3]
+                    ]
+                    def run_holdout(run_seed):
+                        return multi_team_skill_analysis(
+                            base_team=team,
+                            opponent=opponent,
+                            team_variant_files=holdout_files,
+                            points_per_test=points_per_test,
+                            seed=run_seed,
+                        )
+                    with ThreadPoolExecutor(
+                        max_workers=min(num_runs, 8)
+                    ) as executor:
+                        holdout_results = list(
+                            executor.map(run_holdout, holdout_run_seeds)
+                        )
+                    holdout_statistics = aggregate_effect_statistics(
+                        holdout_results, "file_results", confidence
                     )
-                with ThreadPoolExecutor(
-                    max_workers=min(num_runs, 8)
-                ) as executor:
-                    holdout_results = list(
-                        executor.map(run_holdout, holdout_run_seeds)
-                    )
-                holdout_statistics = aggregate_effect_statistics(
-                    holdout_results, "file_results", confidence
-                )
                 skills = [{
                     "parameter": effect["name"],
                     "point": {
@@ -641,7 +645,7 @@ def register_routes(app: Flask) -> None:
                         opponent=opponent,
                         change_value=change_value,
                         points_per_test=points_per_test,
-                        parallel=False,
+                        parallel=num_runs == 1,
                         seed=run_seed,
                     )
                 with ThreadPoolExecutor(
@@ -653,29 +657,31 @@ def register_routes(app: Flask) -> None:
                 effect_statistics = aggregate_effect_statistics(
                     all_results, "parameter_improvements", confidence
                 )
-                holdout_parameters = [
-                    effect["name"] for effect in sorted(
-                        effect_statistics,
-                        key=lambda effect: effect["match_mean"],
-                        reverse=True,
-                    )[:3]
-                ]
-                def run_holdout(run_seed):
-                    return full_skill_analysis(
-                        team=team,
-                        opponent=opponent,
-                        change_value=change_value,
-                        points_per_test=points_per_test,
-                        parallel=False,
-                        seed=run_seed,
-                        parameters=holdout_parameters,
-                    )
-                with ThreadPoolExecutor(
-                    max_workers=min(num_runs, 8)
-                ) as executor:
-                    holdout_results = list(
-                        executor.map(run_holdout, holdout_run_seeds)
-                    )
+                holdout_results = []
+                if num_runs > 1:
+                    holdout_parameters = [
+                        effect["name"] for effect in sorted(
+                            effect_statistics,
+                            key=lambda effect: effect["match_mean"],
+                            reverse=True,
+                        )[:3]
+                    ]
+                    def run_holdout(run_seed):
+                        return full_skill_analysis(
+                            team=team,
+                            opponent=opponent,
+                            change_value=change_value,
+                            points_per_test=points_per_test,
+                            parallel=False,
+                            seed=run_seed,
+                            parameters=holdout_parameters,
+                        )
+                    with ThreadPoolExecutor(
+                        max_workers=min(num_runs, 8)
+                    ) as executor:
+                        holdout_results = list(
+                            executor.map(run_holdout, holdout_run_seeds)
+                        )
                 response = {
                     "statistical_analysis": True,
                     "parameters": {
@@ -690,7 +696,7 @@ def register_routes(app: Flask) -> None:
                     "effect_statistics": effect_statistics,
                     "holdout_statistics": aggregate_effect_statistics(
                         holdout_results, "parameter_improvements", confidence
-                    ),
+                    ) if holdout_results else [],
                     "holdout_seeds": holdout_run_seeds,
                     "results": all_results[0],
                     "individual_runs": all_results,

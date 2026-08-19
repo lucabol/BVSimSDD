@@ -24,6 +24,11 @@ setup(
     long_description_content_type="text/markdown",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
+    extras_require={
+        "acceleration": ["numba>=0.61"],
+        "gpu-cuda12": ["cupy-cuda12x[ctk]>=14,<15"],
+        "gpu-cuda13": ["cupy-cuda13x[ctk]>=14,<15"],
+    },
     package_data={
         "bvsim_web": ["static/**/*", "static/*"],
     },

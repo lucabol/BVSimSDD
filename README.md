@@ -61,6 +61,32 @@ pip install -e .
 bvsim --version
 ```
 
+For faster large statistical analyses, install the optional CPU acceleration
+backend:
+
+```bash
+pip install -e ".[acceleration]"
+```
+
+To enable the optional NVIDIA GPU backend, install the CuPy package matching
+the CUDA runtime used by the deployment:
+
+```bash
+# Recommended for current Azure NVIDIA GPU images
+pip install -e ".[acceleration,gpu-cuda12]"
+
+# Use this instead on a CUDA 13 environment
+pip install -e ".[acceleration,gpu-cuda13]"
+```
+
+BVSim automatically uses the compiled backend for large summary-only
+simulations, including web Simulate, Compare, Skills, Scenarios, sensitivity,
+and delta analyses. With a working CuPy installation and NVIDIA GPU, jobs of
+at least one million points automatically use CUDA; medium jobs use Numba,
+and small jobs use Python. The web Simulate and Compare panels also allow an
+explicit Auto, CPU, or NVIDIA CUDA selection. Detailed rally histories remain
+on Python, and every automatic path falls back to CPU when no GPU is present.
+
 **Method 3: Direct Module Usage**
 ```bash
 # Set Python path and use module directly

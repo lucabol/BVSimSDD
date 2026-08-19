@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from bvsim_core.team import Team
 from bvsim_core.state_machine import simulate_point
+from bvsim_core.summary import simulate_summary
 from bvsim_core.validation import validate_team_configuration
 from bvsim_stats.inference import wilson_interval
 
@@ -44,8 +45,15 @@ class ProgressBar:
             print()  # New line when complete
 
 
-def run_large_simulation(team_a: Team, team_b: Team, num_points: int,
-                        seed: Optional[int] = None, show_progress: bool = True) -> Dict[str, Any]:
+def run_large_simulation(
+    team_a: Team,
+    team_b: Team,
+    num_points: int,
+    seed: Optional[int] = None,
+    show_progress: bool = True,
+    detailed: bool = True,
+    backend: str = "auto",
+) -> Dict[str, Any]:
     """
     Run large-scale simulation between two teams.
     
@@ -55,6 +63,8 @@ def run_large_simulation(team_a: Team, team_b: Team, num_points: int,
         num_points: Number of points to simulate
         seed: Random seed for reproducibility
         show_progress: Whether to show progress bar
+        detailed: Retain every rally history instead of aggregate counters
+        backend: Summary backend (auto, cpu, python, numba, or cuda)
         
     Returns:
         Dictionary with simulation results
@@ -71,6 +81,61 @@ def run_large_simulation(team_a: Team, team_b: Team, num_points: int,
             )
     
     effective_seed = seed if seed is not None else secrets.randbits(64)
+
+    if not detailed:
+        summary = simulate_summary(
+            team_a,
+            team_b,
+            num_points,
+            seed=effective_seed,
+            backend=backend,
+        )
+        _, team_a_lower, team_a_upper = wilson_interval(
+            summary.team_a_wins, num_points
+        )
+        breakdown = summary.aggregate_breakdown()
+        if show_progress:
+            ProgressBar(num_points).update(num_points)
+        return {
+            'team_a_name': team_a.name,
+            'team_b_name': team_b.name,
+            'total_points': num_points,
+            'team_a_wins': summary.team_a_wins,
+            'team_b_wins': num_points - summary.team_a_wins,
+            'team_a_win_rate': summary.team_a_wins / num_points * 100.0,
+            'team_b_win_rate': (
+                num_points - summary.team_a_wins
+            ) / num_points * 100.0,
+            'team_a_win_rate_interval': {
+                'confidence': 0.95,
+                'method': 'Wilson',
+                'lower': team_a_lower * 100,
+                'upper': team_a_upper * 100,
+            },
+            'team_b_win_rate_interval': {
+                'confidence': 0.95,
+                'method': 'Wilson',
+                'lower': (1.0 - team_a_upper) * 100,
+                'upper': (1.0 - team_a_lower) * 100,
+            },
+            'average_duration': summary.average_duration,
+            'point_type_breakdown': breakdown['point_type_breakdown'],
+            'point_type_percentages': breakdown['point_type_percentages'],
+            'breakdown_data': {
+                key: breakdown[key]
+                for key in (
+                    'team_a_point_types',
+                    'team_b_point_types',
+                    'duration_by_type',
+                    'serving_advantage',
+                )
+            },
+            'duration_seconds': time.time() - start_time,
+            'seed': effective_seed,
+            'backend': summary.backend,
+            'points': [],
+        }
+
     seed_stream = random.Random(effective_seed)
 
     # Initialize progress bar

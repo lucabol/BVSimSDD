@@ -5,7 +5,6 @@ Team comparison functionality for multiple team matchups.
 
 import sys
 import os
-import random
 import secrets
 from typing import List, Dict, Any
 from itertools import combinations
@@ -14,7 +13,7 @@ from itertools import combinations
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from bvsim_core.team import Team
-from bvsim_core.state_machine import simulate_point
+from bvsim_core.summary import simulate_summary
 from bvsim_core.validation import validate_team_configuration
 from bvsim_stats.inference import wilson_interval
 
@@ -23,6 +22,7 @@ def compare_teams(
     teams: List[Team],
     points_per_matchup: int = 1000,
     seed: int = None,
+    backend: str = "auto",
 ) -> Dict[str, Any]:
     """
     Compare multiple teams in round-robin format.
@@ -30,6 +30,7 @@ def compare_teams(
     Args:
         teams: List of teams to compare
         points_per_matchup: Number of points per team matchup
+        backend: Summary backend (auto, cpu, python, numba, or cuda)
         
     Returns:
         Dictionary with comparison results
@@ -51,6 +52,7 @@ def compare_teams(
     # Initialize results matrix
     results_matrix = {}
     interval_matrix = {}
+    backends = set()
     team_names = [team.name for team in teams]
     
     for team_name in team_names:
@@ -64,23 +66,15 @@ def compare_teams(
         team_a = teams[i]
         team_b = teams[j]
         
-        # Simulate matchup
-        matchup_seed = random.Random(
-            effective_seed ^ (i << 32) ^ j
+        summary = simulate_summary(
+            team_a,
+            team_b,
+            points_per_matchup,
+            seed=effective_seed ^ (i << 32) ^ j,
+            backend=backend,
         )
-        wins_a = 0
-        for point_idx in range(points_per_matchup):
-            # Alternate serving
-            serving_team = "A" if point_idx % 2 == 0 else "B"
-            point = simulate_point(
-                team_a,
-                team_b,
-                serving_team=serving_team,
-                seed=matchup_seed.getrandbits(64),
-            )
-            
-            if point.winner == "A":
-                wins_a += 1
+        wins_a = summary.team_a_wins
+        backends.add(summary.backend)
         
         wins_b = points_per_matchup - wins_a
         win_rate_a = (wins_a / points_per_matchup) * 100
@@ -128,7 +122,8 @@ def compare_teams(
         'seed': effective_seed,
         'results_matrix': results_matrix,
         'interval_matrix': interval_matrix,
-        'rankings': rankings
+        'rankings': rankings,
+        'backends': sorted(backends),
     }
 
 

@@ -691,14 +691,15 @@ async function simulateCommon(opts) {
     const team_a = document.getElementById('simTeamA').value.trim();
     const team_b = document.getElementById('simTeamB').value.trim();
     const points = document.getElementById('simPoints').value;
+    const backend = document.getElementById('simBackend').value;
   // Always request breakdown unless explicitly disabled in opts
-  const payload = Object.assign({ team_a, team_b, breakdown: true }, opts);
+  const payload = Object.assign({ team_a, team_b, backend, breakdown: true }, opts);
     if (points) payload.points = parseInt(points, 10);
     const res = await api('/api/simulate', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
   clearMatchImpactDisplay();
   renderSimulationChart(res);
-  setSimulateStatus('Simulation complete.', false);
+  setSimulateStatus(`Simulation complete (${res.parameters.backend} backend).`, false);
   } catch (e) { out(e.message); }
 }
 function simulate() { simulateCommon({}); }
@@ -714,7 +715,8 @@ async function skillsCommon(opts) {
     const improve = document.getElementById('skillsImprove').value.trim();
     const points = document.getElementById('skillsPoints').value;
     const runs = document.getElementById('skillsRuns').value;
-    const payload = Object.assign({}, opts);
+    const backend = document.getElementById('skillsBackend').value;
+    const payload = Object.assign({ backend }, opts);
     if (team) payload.team = team;
     if (opponent) payload.opponent = opponent;
     if (improve) payload.improve = improve;
@@ -764,7 +766,7 @@ async function skillsCommon(opts) {
     } else if (res && res.statistical_analysis) {
       renderMatchImpactChart(res);
     }
-  setSkillsStatus('Skills analysis complete.', false);
+  setSkillsStatus(`Skills analysis complete (${res.parameters.backend} backend).`, false);
   } catch (e) { out(e.message); }
 }
 function skillsAnalysis() { skillsCommon({}); }
@@ -786,7 +788,8 @@ async function scenarioCommon(opts){
     if(!custom.length){ setScenariosStatus('Select scenario files', false); out('No scenario files selected'); return; }
     const points = document.getElementById('scenariosPoints').value;
     const runs = document.getElementById('scenariosRuns').value;
-    const payload = Object.assign({ custom }, opts);
+    const backend = document.getElementById('scenariosBackend').value;
+    const payload = Object.assign({ custom, backend }, opts);
     if(points) payload.points = parseInt(points, 10);
     if(runs) payload.runs = parseInt(runs, 10);
   if(team) payload.team = team; if(opponent) payload.opponent = opponent; // no improve field for scenarios
@@ -805,7 +808,7 @@ async function scenarioCommon(opts){
       if(skillsArr.length){ clearMatchImpactDisplay(); renderMatchImpactChart({ statistical_analysis:true, skills: skillsArr }); }
       const paneTitle = document.getElementById('chartPaneTitle'); if(paneTitle){ paneTitle.textContent=`Scenarios: ${skillsArr.length} variants (baseline ${baseline.toFixed(2)}%)`; }
     }
-    setScenariosStatus('Scenarios analysis complete.', false);
+    setScenariosStatus(`Scenarios analysis complete (${res.parameters.backend} backend).`, false);
   } catch(e){ out(e.message); }
 }
 function scenariosAnalysis(){ scenarioCommon({}); }
@@ -833,13 +836,15 @@ async function compareCommon(opts) {
     if (!teams.length) { setCompareStatus('Select at least two teams', false); out('Select at least two teams'); return; }
     if (teams.length < 2) { setCompareStatus('Need 2+ teams', false); out('Need at least two teams to compare'); return; }
     const points = document.getElementById('comparePoints').value;
-    const payload = Object.assign({ teams }, opts);
+    const backend = document.getElementById('compareBackend').value;
+    const payload = Object.assign({ teams, backend }, opts);
     if (points) payload.points = parseInt(points, 10);
     const res = await api('/api/compare', { method: 'POST', body: JSON.stringify(payload) });
     out(res);
   clearMatchImpactDisplay();
   renderComparisonChart(res);
-  setCompareStatus('Comparison complete.', false);
+  const backends = (res.parameters.backends || []).join(', ') || 'summary';
+  setCompareStatus(`Comparison complete (${backends} backend).`, false);
   } catch (e) { out(e.message); }
 }
 function compareTeamsRun() { compareCommon({}); }

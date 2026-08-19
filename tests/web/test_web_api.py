@@ -2,6 +2,7 @@ import json
 import pytest
 
 from bvsim_web import create_app
+from bvsim_core.summary import cuda_backend_available
 
 @pytest.fixture(scope="module")
 def client():
@@ -39,6 +40,43 @@ def test_simulate_quick(client):
     data = rv.get_json()
     assert 'summary' in data
     assert data['summary']['team_a_win_rate'] >= 0
+    assert data['parameters']['backend'] in {'python', 'numba'}
+    assert sum(data['breakdown']['point_type_breakdown'].values()) == 10_000
+    assert data['breakdown']['duration_by_type']
+
+
+def test_simulate_accepts_explicit_cpu_backend(client):
+    rv = client.post(
+        '/api/simulate',
+        json={
+            "team_a": "WebTestTeam",
+            "team_b": "WebTestTeam",
+            "quick": True,
+            "backend": "cpu",
+        },
+    )
+    assert rv.status_code == 200, rv.data
+    data = rv.get_json()
+    assert data['parameters']['requested_backend'] == 'cpu'
+    assert data['parameters']['backend'] in {'python', 'numba'}
+
+
+def test_simulate_accepts_explicit_cuda_backend_when_available(client):
+    if not cuda_backend_available():
+        pytest.skip("CUDA is unavailable")
+    rv = client.post(
+        '/api/simulate',
+        json={
+            "team_a": "WebTestTeam",
+            "team_b": "WebTestTeam",
+            "quick": True,
+            "backend": "cuda",
+        },
+    )
+    assert rv.status_code == 200, rv.data
+    data = rv.get_json()
+    assert data['parameters']['requested_backend'] == 'cuda'
+    assert data['parameters']['backend'] == 'cuda'
 
 
 def test_simulate_blank_defaults(client):
@@ -97,6 +135,22 @@ def test_compare(client):
     assert rv.status_code == 200
     data = rv.get_json()
     assert 'results' in data
+    assert set(data['parameters']['backends']).issubset({'python', 'numba'})
+
+
+def test_compare_accepts_explicit_cpu_backend(client):
+    rv = client.post(
+        '/api/compare',
+        json={
+            "teams": ["WebTestTeam", "WebTestTeam2"],
+            "quick": True,
+            "backend": "cpu",
+        },
+    )
+    assert rv.status_code == 200, rv.data
+    data = rv.get_json()
+    assert data['parameters']['requested_backend'] == 'cpu'
+    assert set(data['parameters']['backends']).issubset({'python', 'numba'})
 
 def test_compare_basic_advanced_keywords(client):
     # Use Basic and Advanced keywords directly (case-insensitive) without existing files
@@ -132,6 +186,24 @@ def test_skills_quick(client):
     assert rv.status_code == 200
     data = rv.get_json()
     assert 'results' in data
+
+
+def test_skills_accepts_explicit_cuda_backend_when_available(client):
+    if not cuda_backend_available():
+        pytest.skip("CUDA is unavailable")
+    rv = client.post(
+        '/api/skills',
+        json={
+            "team": "WebTestTeam",
+            "quick": True,
+            "runs": 1,
+            "backend": "cuda",
+        },
+    )
+    assert rv.status_code == 200, rv.data
+    data = rv.get_json()
+    assert data['parameters']['requested_backend'] == 'cuda'
+    assert data['parameters']['backend'] == 'cuda'
 
 
 def test_skills_explicit_multi_run_includes_holdout(client):
@@ -183,3 +255,7 @@ def test_workload_controls_are_present(client):
     assert 'id="skillsRuns"' in page
     assert 'id="scenariosRuns"' in page
     assert 'id="comparePoints"' in page
+    assert 'id="simBackend"' in page
+    assert 'id="compareBackend"' in page
+    assert 'id="skillsBackend"' in page
+    assert 'id="scenariosBackend"' in page

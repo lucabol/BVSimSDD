@@ -223,6 +223,14 @@ ul.team-list li:hover { background:#f1f5f9; }
             <label>Points</label>
             <input id="simPoints" type="number" placeholder="default" />
           </div>
+          <div>
+            <label>Compute backend</label>
+            <select id="simBackend">
+              <option value="auto">Auto</option>
+              <option value="cpu">CPU</option>
+              <option value="cuda">NVIDIA CUDA</option>
+            </select>
+          </div>
         </div>
         <div class="actions-bottom">
         <div class="btn-group">
@@ -250,6 +258,12 @@ ul.team-list li:hover { background:#f1f5f9; }
           <div><label>Points per test</label><input id="skillsPoints" type="number" min="1" placeholder="default" /></div>
           <div><label>Runs</label><input id="skillsRuns" type="number" min="1" value="1" /></div>
         </div>
+        <label>Compute backend</label>
+        <select id="skillsBackend">
+          <option value="auto">Auto</option>
+          <option value="cpu">CPU</option>
+          <option value="cuda">NVIDIA CUDA</option>
+        </select>
         <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="skillsAnalysis()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-analyze"/></svg><span>Analyze</span></button>
@@ -275,6 +289,12 @@ ul.team-list li:hover { background:#f1f5f9; }
           <div><label>Points per variant</label><input id="scenariosPoints" type="number" min="1" placeholder="default" /></div>
           <div><label>Runs</label><input id="scenariosRuns" type="number" min="1" value="1" /></div>
         </div>
+        <label>Compute backend</label>
+        <select id="scenariosBackend">
+          <option value="auto">Auto</option>
+          <option value="cpu">CPU</option>
+          <option value="cuda">NVIDIA CUDA</option>
+        </select>
   <!-- Removed redundant Improve field (not used in scenario variant comparisons) -->
         <div class="actions-bottom">
         <div class="btn-group">
@@ -297,6 +317,12 @@ ul.team-list li:hover { background:#f1f5f9; }
   <div id="compareTeamsHelp" class="note">Hold Ctrl/Command (desktop) to select multiple. Include 2+ teams. Basic/Advanced templates available.</div>
         <label>Points per matchup</label>
         <input id="comparePoints" type="number" min="1" placeholder="default" />
+        <label>Compute backend</label>
+        <select id="compareBackend">
+          <option value="auto">Auto</option>
+          <option value="cpu">CPU</option>
+          <option value="cuda">NVIDIA CUDA</option>
+        </select>
         <div class="actions-bottom">
         <div class="btn-group">
           <button onclick="compareTeamsRun()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-compare"/></svg><span>Analyze</span></button>

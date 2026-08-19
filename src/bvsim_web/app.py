@@ -10,11 +10,12 @@ from pathlib import Path
 from flask import Flask, jsonify, request, send_file
 
 from bvsim import __version__
+from bvsim_core.summary import uses_accelerated_backend
 from bvsim_core.team import Team
 from bvsim_cli.templates import get_basic_template, get_advanced_template, create_team_template
 from bvsim_cli.comparison import compare_teams, format_comparison_text
 from bvsim_cli.simulation import run_large_simulation
-from bvsim_stats.models import SimulationResults, PointResult
+from bvsim_stats.models import SimulationResults
 from bvsim_stats.analysis import analyze_simulation_results, full_skill_analysis, multi_team_skill_analysis
 from bvsim_stats.inference import (
     aggregate_effect_statistics,
@@ -22,6 +23,13 @@ from bvsim_stats.inference import (
 )
 
 TEAM_GLOB_PATTERNS = ["team_*.yaml", "team_*.yml", "*.yaml", "*.yml"]
+
+
+def analysis_workers(num_runs: int, points_per_test: int) -> int:
+    """Avoid nesting run-level threads around all-core native kernels."""
+    if uses_accelerated_backend(points_per_test):
+        return 1
+    return min(num_runs, 8)
 
 
 def list_team_files() -> List[Path]:
@@ -282,6 +290,7 @@ def register_routes(app: Flask) -> None:
         # Web UI now defaults to requesting breakdown details; treat absence as True
         breakdown = data.get("breakdown", True)
         seed = data.get("seed")
+        backend = data.get("backend") or "auto"
         used_defaults = False
         try:
             # Determine teams based on provided values
@@ -319,55 +328,45 @@ def register_routes(app: Flask) -> None:
             else:
                 num_points = points or 200_000
 
-            sim_data = run_large_simulation(team_a=team_a, team_b=team_b, num_points=num_points, seed=seed, show_progress=False)
-            point_results = [
-                PointResult(
-                    serving_team=p['serving_team'],
-                    winner=p['winner'],
-                    point_type=p['point_type'],
-                    duration=p['duration'],
-                    states=p['states']
-                ) for p in sim_data['points']
-            ]
-            results = SimulationResults(
-                team_a_name=sim_data['team_a_name'],
-                team_b_name=sim_data['team_b_name'],
-                total_points=sim_data['total_points'],
-                points=point_results
+            sim_data = run_large_simulation(
+                team_a=team_a,
+                team_b=team_b,
+                num_points=num_points,
+                seed=seed,
+                show_progress=False,
+                detailed=False,
+                backend=backend,
             )
-            analysis = analyze_simulation_results(results, breakdown=breakdown)
             payload = {
                 "summary": {
-                    "team_a": results.team_a_name,
-                    "team_b": results.team_b_name,
-                    "team_a_win_rate": analysis.team_a_win_rate,
-                    "team_b_win_rate": analysis.team_b_win_rate,
-                    "team_a_wins": analysis.team_a_wins,
-                    "team_b_wins": analysis.team_b_wins,
-                    "total_points": analysis.total_points,
-                    "average_duration": analysis.average_duration,
+                    "team_a": sim_data['team_a_name'],
+                    "team_b": sim_data['team_b_name'],
+                    "team_a_win_rate": sim_data['team_a_win_rate'],
+                    "team_b_win_rate": sim_data['team_b_win_rate'],
+                    "team_a_wins": sim_data['team_a_wins'],
+                    "team_b_wins": sim_data['team_b_wins'],
+                    "total_points": sim_data['total_points'],
+                    "average_duration": sim_data['average_duration'],
                 },
                 "parameters": {
                     "points": num_points,
                     "breakdown": breakdown,
-                    "used_defaults": used_defaults
+                    "used_defaults": used_defaults,
+                    "backend": sim_data['backend'],
+                    "requested_backend": backend,
                 }
             }
             if used_defaults and note:
                 payload["note"] = note
             if breakdown:
-                # The analysis.to_dict() currently stores detailed info under 'breakdown_data'.
-                # Build a consolidated breakdown payload expected by frontend rendering logic.
-                analysis_dict = analysis.to_dict()
-                detailed = analysis_dict.get('breakdown_data') or {}
                 payload["breakdown"] = {
-                    # core distributions
-                    "point_type_breakdown": analysis_dict.get('point_type_breakdown'),
-                    "point_type_percentages": analysis_dict.get('point_type_percentages'),
-                    # detailed sections
-                    **{k: v for k, v in detailed.items() if k in (
-                        'team_a_point_types','team_b_point_types','duration_by_type','serving_advantage'
-                    )}
+                    "point_type_breakdown": sim_data[
+                        'point_type_breakdown'
+                    ],
+                    "point_type_percentages": sim_data[
+                        'point_type_percentages'
+                    ],
+                    **sim_data['breakdown_data'],
                 }
             return jsonify(payload)
         except Exception as e:
@@ -426,6 +425,7 @@ def register_routes(app: Flask) -> None:
         quick = data.get("quick")
         accurate = data.get("accurate")
         points = data.get("points")
+        backend = data.get("backend") or "auto"
         try:
             if quick:
                 num_points = 10_000
@@ -434,8 +434,20 @@ def register_routes(app: Flask) -> None:
             else:
                 # Standard default: 200k points
                 num_points = points or 200_000
-            results = compare_teams(teams, points_per_matchup=num_points)
-            payload = {"parameters": {"points": num_points, "used_defaults": used_defaults}, "results": results}
+            results = compare_teams(
+                teams,
+                points_per_matchup=num_points,
+                backend=backend,
+            )
+            payload = {
+                "parameters": {
+                    "points": num_points,
+                    "used_defaults": used_defaults,
+                    "backends": results["backends"],
+                    "requested_backend": backend,
+                },
+                "results": results,
+            }
             if used_defaults and note:
                 payload["note"] = note
             return jsonify(payload)
@@ -494,6 +506,7 @@ def register_routes(app: Flask) -> None:
         points = data.get("points")
         runs = data.get("runs")
         requested_seed = data.get("seed")
+        backend = data.get("backend") or "auto"
         confidence = float(data.get("confidence") or 0.95)
         try:
             used_defaults = False
@@ -556,6 +569,16 @@ def register_routes(app: Flask) -> None:
             holdout_run_seeds = [
                 seed_stream.getrandbits(64) for _ in range(num_runs)
             ]
+            parameter_parallel = (
+                num_runs == 1
+                and (
+                    backend == "python"
+                    or (
+                        backend in {"auto", "cpu"}
+                        and not uses_accelerated_backend(points_per_test)
+                    )
+                )
+            )
 
             if custom_files:
                 clean_files = [f for f in custom_files if f]
@@ -566,9 +589,11 @@ def register_routes(app: Flask) -> None:
                         team_variant_files=clean_files,
                         points_per_test=points_per_test,
                         seed=run_seed,
+                        parallel=parameter_parallel,
+                        backend=backend,
                     )
                 with ThreadPoolExecutor(
-                    max_workers=min(num_runs, 8)
+                    max_workers=analysis_workers(num_runs, points_per_test)
                 ) as executor:
                     all_results = list(
                         executor.map(run_single, run_seeds)
@@ -603,9 +628,11 @@ def register_routes(app: Flask) -> None:
                             team_variant_files=holdout_files,
                             points_per_test=points_per_test,
                             seed=run_seed,
+                            parallel=False,
+                            backend=backend,
                         )
                     with ThreadPoolExecutor(
-                        max_workers=min(num_runs, 8)
+                        max_workers=analysis_workers(num_runs, points_per_test)
                     ) as executor:
                         holdout_results = list(
                             executor.map(run_holdout, holdout_run_seeds)
@@ -636,7 +663,7 @@ def register_routes(app: Flask) -> None:
                             "holdout_statistics": holdout_statistics,
                             "holdout_seeds": holdout_run_seeds,
                             "baseline": {"mean": baseline_mean, "lower": baseline_lower, "upper": baseline_upper},
-                            "parameters": {"points": points_per_test, "change_value": change_value, "custom": True, "runs": num_runs, "confidence": confidence, "used_defaults": used_defaults, "master_seed": master_seed},
+                            "parameters": {"points": points_per_test, "change_value": change_value, "custom": True, "runs": num_runs, "confidence": confidence, "used_defaults": used_defaults, "master_seed": master_seed, "requested_backend": backend, "backend": all_results[0]["baseline_service_win_rates"]["backend"]},
                             "teams": {"team": team.name, "opponent": opponent.name}}
             else:
                 def run_single(run_seed):
@@ -645,11 +672,12 @@ def register_routes(app: Flask) -> None:
                         opponent=opponent,
                         change_value=change_value,
                         points_per_test=points_per_test,
-                        parallel=num_runs == 1,
+                        parallel=parameter_parallel,
                         seed=run_seed,
+                        backend=backend,
                     )
                 with ThreadPoolExecutor(
-                    max_workers=min(num_runs, 8)
+                    max_workers=analysis_workers(num_runs, points_per_test)
                 ) as executor:
                     all_results = list(
                         executor.map(run_single, run_seeds)
@@ -675,9 +703,10 @@ def register_routes(app: Flask) -> None:
                             parallel=False,
                             seed=run_seed,
                             parameters=holdout_parameters,
+                            backend=backend,
                         )
                     with ThreadPoolExecutor(
-                        max_workers=min(num_runs, 8)
+                        max_workers=analysis_workers(num_runs, points_per_test)
                     ) as executor:
                         holdout_results = list(
                             executor.map(run_holdout, holdout_run_seeds)
@@ -692,6 +721,10 @@ def register_routes(app: Flask) -> None:
                         "runs": num_runs,
                         "confidence": confidence,
                         "master_seed": master_seed,
+                        "requested_backend": backend,
+                        "backend": all_results[0][
+                            "baseline_service_win_rates"
+                        ]["backend"],
                     },
                     "effect_statistics": effect_statistics,
                     "holdout_statistics": aggregate_effect_statistics(

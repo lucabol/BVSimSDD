@@ -107,7 +107,7 @@ bvsim.bat examples
 ```bash
 # Statistical analysis with confidence intervals (NEW!)
 ./bvsim skills                        # 5 statistical runs, 200k points each, 95% confidence
-./bvsim skills --improve 10%          # Test 10% improvement with statistical validation
+./bvsim skills --improve 10%          # Test a 10-point model perturbation
 ./bvsim skills --runs 10              # 10 statistical runs for higher confidence
 ./bvsim skills --confidence 0.99      # 99% confidence intervals
 
@@ -120,14 +120,14 @@ bvsim.bat examples
 ./bvsim skills team_a team_b          # Compare two teams with statistical rigor
 ```
 
-**NEW Sample Output - Statistical Analysis with Match Impact:**
+**Illustrative output format (values depend on the configured model and seed):**
 ```
 BVSim Skills Statistical Analysis
 Number of Runs: 5 | Average Duration: 2.8s
 Baseline Win Rate: 50.2% [95% CI: 49.8% - 50.6%]
 Testing +5.0% improvement on 36 parameters (200,000 points each)
 
-Skill Parameter                                    Point Impact  Match Impact  95% Match CI              Significant
+Skill Parameter                                    Point Impact  Match Impact  95% Match CI              Holm Sig.
                                                    (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   
 --------------------------------------------------------------------------------------------------------------------------------------------
 serve_probabilities.ace                             +3.24%     +24.15%     [+18.2% - +30.1%]         YES
@@ -146,20 +146,21 @@ Match % │
         │────────────────────────────────────────────────────────────────
         │0%          +10%                    +20%                     +30%
 
-Legend: ● Significant positive  ● Significant negative  ○ Non-significant  ┊ Zero line
+Legend: ● Holm-significant positive  ● Holm-significant negative  ○ Non-significant  ┊ Zero line
 
 STATISTICAL SUMMARY:
 Total skills analyzed: 36
-Statistically significant positive impacts: 12
-Most impactful skill: serve_probabilities.ace
+Holm-significant positive impacts: 12
+Top exploratory skill: serve_probabilities.ace
 Point Impact: +3.24% [+2.8% - +3.7%]
 Match Impact: +24.15% [+18.2% - +30.1%]
 ```
 
 **🔥 Key Features:**
-- **Match Impact Simulation**: Point improvements converted to realistic volleyball match outcomes (21-point sets, win-by-2)
-- **Statistical Confidence**: Multiple runs with confidence intervals show reliability of results
-- **Significance Testing**: Identifies which improvements are statistically meaningful vs random variation
+- **Service-aware Match Conversion**: Separate point rates when each team serves are converted deterministically under 21/21/15, win-by-two rules
+- **Monte Carlo Intervals**: Run-level t intervals quantify simulation uncertainty for fixed model inputs
+- **Multiplicity Control**: Holm-adjusted p-values are reported across each tested family
+- **Holdout Confirmation**: Top exploratory candidates are rerun on independent random streams
 - **Visual Charts**: Confidence interval charts with zero baseline for easy interpretation
 - **Parallel Processing**: Multiple analyses run simultaneously for speed
 
@@ -179,7 +180,7 @@ Number of Runs: 5 | Average Duration: 1.8s
 Baseline Win Rate: 50.1% [95% CI: 49.7% - 50.5%]
 Testing 3 custom team variants (200,000 points each)
 
-Scenario File                                      Point Impact  Match Impact  95% Match CI              Significant
+Scenario File                                      Point Impact  Match Impact  95% Match CI              Holm Sig.
                                                    (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   
 --------------------------------------------------------------------------------------------------------------------------------------------
 variant_attack_focus                                +4.12%     +31.24%     [+26.8% - +35.7%]         YES
@@ -194,13 +195,14 @@ Match % │
         │────────────────────────────────────────────────────────────────
         │0%          +10%                    +20%                     +30%
 
-RECOMMENDED TRAINING SCENARIOS:
+HOLM-SIGNIFICANT MODEL EFFECTS (EXPLORATORY):
 1. scenario_attack_focused:
    Point: +4.12% [+3.8% - +4.4%] | Match: +31.24% [+26.8% - +35.7%]
 2. scenario_balanced:
    Point: +3.18% [+2.9% - +3.5%] | Match: +23.47% [+19.2% - +27.8%]
 
-Each scenario applies all improvements from its file together with statistical validation.
+Each scenario applies all changes from its file. The ranking is model-implied,
+not a validated training recommendation.
 ```
 
 ### 2. Team Comparison
@@ -513,12 +515,13 @@ All major commands support the same speed options for predictable performance:
 - **Why the amplification?** In volleyball, small point advantages compound across 21-point sets with win-by-2 rules
 
 **Confidence Intervals:**
-- **95% CI [+15.2% - +21.4%]**: 95% confident the true improvement is in this range
-- **Significant = YES**: Improvement is statistically meaningful, not random variation
-- **Significant = No**: Could be due to random chance, need more data or larger improvement
+- **95% CI [+15.2% - +21.4%]**: Monte Carlo uncertainty across independent runs under the configured model
+- **Holm Sig. = YES**: The model effect passes family-wise multiple-comparison correction
+- **Holm Sig. = No**: The simulation does not distinguish the effect from zero at the requested level
+- One run reports its interval and significance as unavailable.
 
 **Visual Charts:**
-- **●**: Statistically significant result with confidence interval bar
+- **●**: Holm-significant model effect with confidence interval bar
 - **○**: Non-significant result (could be random)
 - **┊**: Zero line - no improvement baseline
 - **Chart always shows 0%**: Easy comparison to "no change" reference point
@@ -527,7 +530,7 @@ All major commands support the same speed options for predictable performance:
 ```
 Point Impact: +2.1% | Match Impact: +16.3% [+12.1% - +20.5%] | Significant: YES
 ↑                    ↑                      ↑                   ↑
-Direct effect        Volleyball match      95% confidence      Reliable
+Direct effect        Modeled match         Monte Carlo CI      Holm adjusted
                      amplification         interval            improvement
 ```
 
@@ -572,11 +575,11 @@ A:serve(in_play) → B:receive(poor) → B:set(poor) → B:attack(defended) → 
 
 ## Common Use Cases
 
-### Coach Preparation (Updated with Statistical Analysis)
+### Exploratory Model Analysis
 ```bash
-# 1. Analyze your team's skill priorities with statistical confidence
-./bvsim skills my_team --runs 10                           # High statistical confidence
-./bvsim skills my_team --improve 10% --confidence 0.99     # Test realistic improvements
+# 1. Explore model sensitivity with controlled Monte Carlo uncertainty
+./bvsim skills my_team --runs 10
+./bvsim skills my_team --improve 10% --confidence 0.99
 
 # 2. Scout the opponent  
 ./bvsim create-team "Opponent" --output opponent.yaml
@@ -589,9 +592,9 @@ A:serve(in_play) → B:receive(poor) → B:set(poor) → B:attack(defended) → 
 # 4. Study rally patterns
 ./bvsim examples 10 --teams my_team opponent
 
-# 5. Identify training focus with statistical validation
+# 5. Compare hypothetical team configurations
 ./bvsim skills my_team --custom improvements/*.yaml --runs 10    # Compare all training scenarios
-# Focus on scenarios marked "Significant: YES" with highest Match Impact
+# Treat rankings as exploratory until calibrated against observed match data
 ```
 
 ### Tournament Analysis
@@ -610,31 +613,32 @@ A:serve(in_play) → B:receive(poor) → B:set(poor) → B:attack(defended) → 
 ./bvsim examples 5 --teams team_a team_b
 ```
 
-### Training Focus (Statistical Approach)
+### Scenario Exploration
 ```bash
-# Find statistically significant high-impact skills for training
-./bvsim skills my_team --improve 10% --runs 10              # High confidence analysis
-# Look for skills marked "Significant: YES" with highest Match Impact
+# Find model parameters with Holm-significant simulated effects
+./bvsim skills my_team --improve 10% --runs 10
 
 # Test realistic training improvements with confidence intervals  
 ./bvsim skills my_team --custom training_goals.yaml --confidence 0.99
-# Focus on scenarios with confidence intervals that don't include 0%
+# Review Holm-adjusted results and independent holdout confirmation
 
 # Quick statistical iteration during training planning
 ./bvsim skills my_team --improve 5% --quick --runs 3        # Fast but still statistical
 
-# Compare multiple training approaches with statistical validation
+# Compare multiple hypothetical approaches under the model
 ./bvsim skills my_team --custom scenario_a.yaml scenario_b.yaml scenario_c.yaml --runs 10
-# Choose training approach with highest significant Match Impact
+# Do not convert this ranking directly into a training prescription
 
 # Generate rally examples to understand skill application patterns
 ./bvsim examples 15 --teams my_team
 ```
 
-**🎯 Training Decision Framework:**
-1. **Significant: YES + High Match Impact (>15%)** → Priority training focus
-2. **Significant: YES + Medium Match Impact (5-15%)** → Secondary training goals  
-3. **Significant: No** → Skills that may not be worth intensive training time
+> [!IMPORTANT]
+> BVSim has not been calibrated or validated against observed match data. Its
+> intervals describe Monte Carlo uncertainty under fixed input probabilities,
+> not uncertainty about real teams. Rankings and match impacts are
+> model-implied exploratory results, not evidence that a training intervention
+> will produce the reported real-world effect.
 
 **Example deltas.yaml file:**
 ```yaml

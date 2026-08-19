@@ -102,7 +102,7 @@ def cmd_skill_analysis(args):
                 )
                 
                 # Print table header
-                print(f"{'Rank':<4} {'Parameter':<50} {'Win Rate':<9} {'Improvement':<12} {'Current→New'}")
+                print(f"{'Rank':<4} {'Parameter':<50} {'Win Rate':<9} {'Improvement':<12} {'Current->New'}")
                 print("-" * 90)
                 
                 for i, (parameter, data) in enumerate(sorted_params, 1):
@@ -117,7 +117,7 @@ def cmd_skill_analysis(args):
                     display_param = display_param.replace("block_probabilities.power_attack.deflection_to_attack", "block_probabilities.power_attack.deflection_to_a")
                     
                     print(f"{i:<4} {display_param:<50} {win_rate:<8.1f}% {improvement:+8.1f}% "
-                          f"{current:.3f}→{new_val:.3f}")
+                          f"{current:.3f}->{new_val:.3f}")
                 
                 print(f"\nAnalysis completed. Each test simulated {args.points} points.")
                 

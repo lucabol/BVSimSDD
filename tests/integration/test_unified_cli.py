@@ -7,12 +7,13 @@ import subprocess
 import tempfile
 import os
 import json
+import sys
 from pathlib import Path
 
 
 def run_bvsim(args, timeout=90):
     """Run bvsim command and return result"""
-    cmd = ['python3', '-m', 'bvsim'] + args
+    cmd = [sys.executable, '-m', 'bvsim'] + args
     env = os.environ.copy()
     # Use absolute path for PYTHONPATH - go up two levels from tests/integration/
     current_dir = Path(__file__).parent.parent.parent.resolve()
@@ -169,6 +170,11 @@ receive_probabilities:
             assert 'Custom Scenarios Statistical Analysis' in result.stdout
             assert 'variant1' in result.stdout
             assert 'variant2' in result.stdout
+            holdout_output = result.stdout.split(
+                'INDEPENDENT HOLDOUT CONFIRMATION', 1
+            )[1]
+            assert 'variant' in holdout_output
+            assert 'Team variant file not found' not in result.stderr
             
             print("✓ Multi-file custom skills analysis works")
         finally:

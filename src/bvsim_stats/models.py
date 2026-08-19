@@ -4,7 +4,7 @@ Data models for statistical analysis results.
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 
 
@@ -25,6 +25,7 @@ class SimulationResults:
     team_b_name: str
     total_points: int
     points: List[PointResult]
+    seed: Optional[int] = None
     
     @classmethod
     def from_json_file(cls, file_path: str) -> 'SimulationResults':
@@ -47,12 +48,13 @@ class SimulationResults:
             team_a_name=data['team_a_name'],
             team_b_name=data['team_b_name'],
             total_points=data['total_points'],
-            points=points
+            points=points,
+            seed=data.get('seed'),
         )
     
     def to_dict(self) -> dict:
         """Convert to dictionary"""
-        return {
+        result = {
             'team_a_name': self.team_a_name,
             'team_b_name': self.team_b_name,
             'total_points': self.total_points,
@@ -67,6 +69,9 @@ class SimulationResults:
                 for p in self.points
             ]
         }
+        if self.seed is not None:
+            result['seed'] = self.seed
+        return result
 
 
 @dataclass
@@ -80,6 +85,8 @@ class AnalysisResults:
     point_type_breakdown: Dict[str, int]
     point_type_percentages: Dict[str, float]
     average_duration: float
+    team_a_win_rate_interval: Optional[Dict[str, float]] = None
+    team_b_win_rate_interval: Optional[Dict[str, float]] = None
     
     def to_text(self, team_a_name: str = "Team A", team_b_name: str = "Team B") -> str:
         """Format as text output"""
@@ -91,6 +98,17 @@ class AnalysisResults:
             "",
             "Point Types:"
         ]
+        if self.team_a_win_rate_interval and self.team_b_win_rate_interval:
+            a_interval = self.team_a_win_rate_interval
+            b_interval = self.team_b_win_rate_interval
+            lines[2] += (
+                f" [95% Wilson CI: {a_interval['lower']:.2f}% - "
+                f"{a_interval['upper']:.2f}%]"
+            )
+            lines[3] += (
+                f" [95% Wilson CI: {b_interval['lower']:.2f}% - "
+                f"{b_interval['upper']:.2f}%]"
+            )
         
         for point_type, count in self.point_type_breakdown.items():
             percentage = self.point_type_percentages[point_type]
@@ -142,6 +160,10 @@ class AnalysisResults:
             'point_type_percentages': self.point_type_percentages,
             'average_duration': self.average_duration
         }
+        if self.team_a_win_rate_interval is not None:
+            result['team_a_win_rate_interval'] = self.team_a_win_rate_interval
+        if self.team_b_win_rate_interval is not None:
+            result['team_b_win_rate_interval'] = self.team_b_win_rate_interval
         
         # Include breakdown data if available
         if hasattr(self, 'breakdown_data') and self.breakdown_data:
@@ -156,6 +178,7 @@ class SensitivityDataPoint:
     parameter_value: float
     win_rate: float
     change_from_base: float
+    match_change_from_base: Optional[float] = None
 
 
 @dataclass
@@ -165,6 +188,7 @@ class SensitivityResults:
     base_win_rate: float
     data_points: List[SensitivityDataPoint]
     impact_factor: str  # "LOW", "MEDIUM", "HIGH"
+    base_service_win_rates: Optional[Dict[str, float]] = None
     
     def to_text(self, team_name: str = "Team") -> str:
         """Format as text output"""
@@ -190,16 +214,20 @@ class SensitivityResults:
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON output"""
-        return {
+        result = {
             'parameter_name': self.parameter_name,
             'base_win_rate': self.base_win_rate,
             'data_points': [
                 {
                     'parameter_value': p.parameter_value,
                     'win_rate': p.win_rate,
-                    'change_from_base': p.change_from_base
+                    'change_from_base': p.change_from_base,
+                    'match_change_from_base': p.match_change_from_base,
                 }
                 for p in self.data_points
             ],
             'impact_factor': self.impact_factor
         }
+        if self.base_service_win_rates is not None:
+            result['base_service_win_rates'] = self.base_service_win_rates
+        return result

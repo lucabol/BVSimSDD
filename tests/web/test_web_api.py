@@ -61,15 +61,29 @@ def test_simulate_one_blank_other_basic(client):
     assert data['summary']['team_b'] == 'Team B'
 
 def test_skills_blank_defaults(client):
-    rv = client.post('/api/skills', json={"quick": True})
+    rv = client.post(
+        '/api/skills',
+        json={"points": 20, "runs": 1, "seed": 123},
+    )
     assert rv.status_code == 200
     data = rv.get_json()
     assert data['parameters'].get('used_defaults') is True
     assert data['teams']['team'] == 'Team A'
     assert data['teams']['opponent'] == 'Team B'
+    assert data['parameters']['master_seed'] == 123
+    assert data['effect_statistics'][0]['point_lower'] is None
+    assert len(data['holdout_statistics']) == 3
+    assert data['holdout_statistics'][0]['adjusted_p_value'] is None
 
 def test_skills_one_blank_other_basic(client):
-    rv = client.post('/api/skills', json={"team": "tests/data/teams/team_soloteamx.yaml", "quick": True})
+    rv = client.post(
+        '/api/skills',
+        json={
+            "team": "tests/data/teams/team_soloteamx.yaml",
+            "points": 20,
+            "runs": 1,
+        },
+    )
     assert rv.status_code == 200
     data = rv.get_json()
     # Opponent blank -> Basic template Team B
@@ -114,7 +128,7 @@ def test_examples(client):
 
 
 def test_skills_quick(client):
-    rv = client.post('/api/skills', json={"team": "WebTestTeam", "quick": True, "improve": "5%"})
+    rv = client.post('/api/skills', json={"team": "WebTestTeam", "quick": True, "improve": "5%", "runs": 1})
     assert rv.status_code == 200
     data = rv.get_json()
     assert 'results' in data

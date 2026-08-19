@@ -4,6 +4,7 @@ Team configuration templates for creating new teams.
 """
 
 import yaml
+import copy
 from pathlib import Path
 
 
@@ -42,7 +43,7 @@ def _load_template(template_name: str) -> dict:
         
         _template_cache[template_name] = template_data
     
-    return _template_cache[template_name].copy()
+    return copy.deepcopy(_template_cache[template_name])
 
 
 def get_basic_template(team_name: str) -> dict:

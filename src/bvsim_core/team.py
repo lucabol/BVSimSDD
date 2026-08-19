@@ -5,6 +5,7 @@ Represents a team with conditional probability distributions for all skills.
 """
 
 import yaml
+import copy
 from dataclasses import dataclass
 from typing import Dict, List, Any
 from pathlib import Path
@@ -93,7 +94,7 @@ class Team:
                 merged[key] = data[key]
             else:
                 # Use a copy to prevent accidental mutation of cached template
-                merged[key] = basic_defaults.get(key, {}).copy()
+                merged[key] = copy.deepcopy(basic_defaults.get(key, {}))
 
         return cls(
             name=merged['name'],
@@ -109,12 +110,12 @@ class Team:
         """Convert team to dictionary"""
         return {
             'name': self.name,
-            'serve_probabilities': self.serve_probabilities,
-            'receive_probabilities': self.receive_probabilities,
-            'set_probabilities': self.set_probabilities,
-            'attack_probabilities': self.attack_probabilities,
-            'block_probabilities': self.block_probabilities,
-            'dig_probabilities': self.dig_probabilities
+            'serve_probabilities': copy.deepcopy(self.serve_probabilities),
+            'receive_probabilities': copy.deepcopy(self.receive_probabilities),
+            'set_probabilities': copy.deepcopy(self.set_probabilities),
+            'attack_probabilities': copy.deepcopy(self.attack_probabilities),
+            'block_probabilities': copy.deepcopy(self.block_probabilities),
+            'dig_probabilities': copy.deepcopy(self.dig_probabilities)
         }
     
     def to_yaml(self) -> str:

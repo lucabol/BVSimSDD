@@ -54,11 +54,13 @@ def do_attack(attacking_team_obj: Team, set_quality: str, rng: random.Random) ->
     return choose_outcome(attack_probs, rng)
 
 
-def do_defense(defending_team_obj: Team, attack_quality: str, rng: random.Random) -> tuple[str, str]:
+def do_defense(attacking_team_obj: Team, defending_team_obj: Team,
+               attack_quality: str, rng: random.Random) -> tuple[str, str]:
     """
     Execute defense (block + potential dig) based on attack quality.
     
     Args:
+        attacking_team_obj: Team whose attack is being defended
         defending_team_obj: Team doing the defending
         attack_quality: Quality of the attack
         rng: Random number generator
@@ -83,7 +85,7 @@ def do_defense(defending_team_obj: Team, attack_quality: str, rng: random.Random
         return (block_outcome, None)  # Point ends
     elif block_outcome == "deflection_to_attack":
         # Ball deflects to attacking team's side - attacking team must dig
-        dig_probs = defending_team_obj.dig_probabilities.get("deflected_attack", {})
+        dig_probs = attacking_team_obj.dig_probabilities.get("deflected_attack", {})
         if not dig_probs:
             dig_probs = {"excellent": 0.3, "good": 0.4, "poor": 0.25, "error": 0.05}
         
@@ -172,7 +174,9 @@ def continue_rally(states: list, attacking_team: str, defending_team: str,
                 
             # 3. Defense (defending team attempts block + dig)
             defending_team_obj = teams[defending_team]
-            block_outcome, dig_outcome = do_defense(defending_team_obj, attack_quality, rng)
+            block_outcome, dig_outcome = do_defense(
+                attacking_team_obj, defending_team_obj, attack_quality, rng
+            )
             
             if block_outcome != "no_block":
                 states.append(State(team=defending_team, action="block", quality=block_outcome))
@@ -248,9 +252,10 @@ def continue_rally(states: list, attacking_team: str, defending_team: str,
                             states=states
                         )
                     elif attack_quality == "defended":
-                        # Rally continues - teams switch roles
-                        attacking_team, defending_team = defending_team, attacking_team
-                        dig_quality = "excellent"  # New rally cycle
+                        # The original attacker defended the counterattack and
+                        # regains possession. The model treats that unrecorded
+                        # defensive contact as an excellent dig.
+                        dig_quality = "excellent"
                         continue
                 else:
                     # Handle other block outcomes (no_touch, etc.)
@@ -322,8 +327,9 @@ def choose_outcome(probabilities: dict, rng: random.Random) -> str:
         if r <= cumulative:
             return outcome
     
-    # Fallback to last outcome if rounding errors
-    return list(probabilities.keys())[-1]
+    if abs(cumulative - 1.0) <= 0.001:
+        return list(probabilities.keys())[-1]
+    raise ValueError(f"Probability distribution sums to {cumulative:.6f}, expected 1.0")
 
 
 def simulate_point(team_a: Team, team_b: Team, serving_team: str = "A", seed: Optional[int] = None) -> Point:
@@ -506,7 +512,8 @@ def simulate_point(team_a: Team, team_b: Team, serving_team: str = "A", seed: Op
                         states=states
                     )
                 elif attack_quality == "defended":
-                    # Rally continues - now receiving team defends the counter-attack
+                    # The receiving team is assumed to defend the counterattack
+                    # with an excellent contact and regains possession.
                     return continue_rally(
                         states=states,
                         attacking_team=receiving_team,  # receiving team now attacks

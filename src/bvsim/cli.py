@@ -12,6 +12,7 @@ import time
 import statistics
 import math
 import random
+import secrets
 from pathlib import Path
 from typing import List, Optional, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -19,8 +20,16 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from . import __version__
 from bvsim_core.team import Team
 from bvsim_core.state_machine import simulate_point
+from bvsim_core.validation import validate_team_configuration
 from bvsim_stats.models import SimulationResults
 from bvsim_stats.analysis import analyze_simulation_results, delta_skill_analysis, full_skill_analysis, sensitivity_analysis, multi_team_skill_analysis
+from bvsim_stats.inference import (
+    aggregate_effect_statistics,
+    holm_adjust,
+    mean_confidence_interval,
+    paired_difference_statistics,
+)
+from bvsim_stats.match import match_impact, match_win_probability
 from bvsim_cli.templates import get_basic_template, get_advanced_template, create_team_template
 from bvsim_cli.comparison import compare_teams
 
@@ -41,89 +50,39 @@ class Colors:
 
 def simulate_volleyball_match(a_win_prob: float = 0.52, max_games: int = 10000, sets_to_win: int = 2, 
                              points_to_win_standard: int = 21, points_to_win_last: int = 15) -> float:
-    """
-    Simulate volleyball matches and return the win rate for team A.
-    
-    Parameters:
-    a_win_prob: Probability of team A winning a point
-    max_games: Number of matches to simulate
-    sets_to_win: Number of sets to win the match
-    points_to_win_standard: Points to win a set (unless deciding set)
-    points_to_win_last: Points to win the deciding set
-    
-    Returns:
-    Match win rate for team A
-    """
-    a_wins = b_wins = 0
-
-    while a_wins + b_wins < max_games:
-        a_sets = b_sets = 0
-
-        while a_sets < sets_to_win and b_sets < sets_to_win:
-            a_points = b_points = 0
-            points_to_win = points_to_win_standard if a_sets + b_sets < 2 * sets_to_win - 1 else points_to_win_last
-
-            while not (a_points >= points_to_win and a_points - b_points >= 2) and not (b_points >= points_to_win and b_points - a_points >= 2):
-                a_win_point = random.random() < a_win_prob
-                if a_win_point:
-                    a_points += 1
-                else:
-                    b_points += 1
-
-                if a_points >= points_to_win and a_points - b_points >= 2:
-                    a_sets += 1
-                elif b_points >= points_to_win and b_points - a_points >= 2:
-                    b_sets += 1
-
-                if a_sets == sets_to_win:
-                    a_wins += 1
-                    break
-                elif b_sets == sets_to_win:
-                    b_wins += 1
-                    break
-            
-            if a_sets == sets_to_win or b_sets == sets_to_win:
-                break
-
-    return a_wins / (a_wins + b_wins) if (a_wins + b_wins) > 0 else 0.5
+    """Compatibility wrapper for the deterministic IID point model."""
+    if (
+        sets_to_win != 2
+        or points_to_win_standard != 21
+        or points_to_win_last != 15
+    ):
+        raise ValueError("Only standard beach-volleyball match rules are supported")
+    return match_win_probability(a_win_prob, a_win_prob)
 
 
 def point_to_match_impact(point_improvement: float, baseline_point_rate: float = 0.5) -> float:
     """Convert point win rate improvement to match win rate improvement."""
-    baseline_match_rate = simulate_volleyball_match(baseline_point_rate)
-    improved_match_rate = simulate_volleyball_match(baseline_point_rate + point_improvement / 100.0)
-    return (improved_match_rate - baseline_match_rate) * 100.0
+    improved = min(
+        max(baseline_point_rate + point_improvement / 100.0, 0.0), 1.0
+    )
+    return match_impact(
+        baseline_point_rate, baseline_point_rate, improved, improved
+    )
 
 
-def calculate_confidence_interval(values: List[float], confidence: float = 0.95) -> Tuple[float, float, float]:
+def calculate_confidence_interval(
+    values: List[float], confidence: float = 0.95
+) -> Tuple[float, Optional[float], Optional[float]]:
     """Calculate mean and confidence interval for a list of values."""
-    if len(values) < 2:
-        return values[0] if values else 0.0, 0.0, 0.0
-    
-    n = len(values)
-    mean = statistics.mean(values)
-    
-    if n == 2:
-        # For n=2, use the range as a simple interval
-        half_range = abs(values[1] - values[0]) / 2
-        return mean, mean - half_range, mean + half_range
-    
-    stdev = statistics.stdev(values)
-    
-    # Choose appropriate distribution based on sample size
-    if n >= 30:
-        # Large sample: use normal distribution (z-distribution)
-        z_critical = 1.96 if confidence >= 0.95 else 1.645  # 95% or 90%
-        margin_of_error = z_critical * (stdev / math.sqrt(n))
-    else:
-        # Small sample: use t-distribution
-        # t-critical values for 95% confidence interval
-        t_critical_map = {3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447, 8: 2.365, 9: 2.306, 10: 2.262,
-                         11: 2.228, 12: 2.201, 13: 2.179, 14: 2.160, 15: 2.145, 20: 2.086, 25: 2.064, 29: 2.045}
-        t_critical = t_critical_map.get(n, 2.045)  # Default to n=29 value for n>29 but <30
-        margin_of_error = t_critical * (stdev / math.sqrt(n))
-    
-    return mean, mean - margin_of_error, mean + margin_of_error
+    return mean_confidence_interval(values, confidence)
+
+
+def format_confidence_interval(
+    lower: Optional[float], upper: Optional[float], precision: int = 1
+) -> str:
+    if lower is None or upper is None:
+        return "N/A (requires at least 2 runs)"
+    return f"{lower:.{precision}f}% - {upper:.{precision}f}%"
 
 
 def format_parameter_name(param_name: str) -> str:
@@ -138,7 +97,16 @@ def format_parameter_name(param_name: str) -> str:
     return param_name
 
 
-def run_single_skills_analysis(team: Team, opponent: Team, change_value: float, points_per_test: int, parallel: bool, run_number: int) -> Tuple[Dict[str, Any], float]:
+def run_single_skills_analysis(
+    team: Team,
+    opponent: Team,
+    change_value: float,
+    points_per_test: int,
+    parallel: bool,
+    run_number: int,
+    run_seed: int,
+    parameters: Optional[List[str]] = None,
+) -> Tuple[Dict[str, Any], float]:
     """Run a single skills analysis and return the results and duration."""
     start_time = time.time()
     
@@ -147,14 +115,24 @@ def run_single_skills_analysis(team: Team, opponent: Team, change_value: float, 
         opponent=opponent,
         change_value=change_value,
         points_per_test=points_per_test,
-        parallel=parallel
+        parallel=parallel,
+        seed=run_seed,
+        parameters=parameters,
     )
+    results["run_number"] = run_number
     
     duration = time.time() - start_time
     return results, duration
 
 
-def run_single_custom_analysis(team: Team, opponent: Team, custom_team_files: List[str], points_per_test: int, run_number: int) -> Tuple[Dict[str, Any], float]:
+def run_single_custom_analysis(
+    team: Team,
+    opponent: Team,
+    custom_team_files: List[str],
+    points_per_test: int,
+    run_number: int,
+    run_seed: int,
+) -> Tuple[Dict[str, Any], float]:
     """Run a single custom scenario analysis (team variant files) and return the results and duration."""
     start_time = time.time()
 
@@ -162,14 +140,46 @@ def run_single_custom_analysis(team: Team, opponent: Team, custom_team_files: Li
         base_team=team,
         opponent=opponent,
         team_variant_files=custom_team_files,
-        points_per_test=points_per_test
+        points_per_test=points_per_test,
+        seed=run_seed,
     )
+    results["run_number"] = run_number
 
     duration = time.time() - start_time
     return results, duration
 
 
-def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_durations: List[float], delta_files: List[str], points: int):
+def print_holdout_confirmation(
+    statistics_rows: List[Dict[str, Any]],
+    confidence: float,
+) -> None:
+    """Print independent confirmation results for selected candidates."""
+    label = f"{confidence * 100:g}%"
+    print(
+        f"\n{Colors.BOLD}INDEPENDENT HOLDOUT CONFIRMATION "
+        f"({label} Monte Carlo CIs):{Colors.END}"
+    )
+    for row in sorted(
+        statistics_rows, key=lambda item: item["match_mean"], reverse=True
+    ):
+        match_ci = format_confidence_interval(
+            row["match_lower"], row["match_upper"], 2
+        )
+        status = "YES" if row["holm_significant"] else "No"
+        print(
+            f"{format_parameter_name(row['name']):<50} "
+            f"{row['match_mean']:+6.2f}% [{match_ci}] "
+            f"Holm confirmed: {status}"
+        )
+
+
+def print_custom_statistical_analysis(
+    all_results: List[Dict[str, Any]],
+    all_durations: List[float],
+    delta_files: List[str],
+    points: int,
+    confidence: float,
+):
     """Print statistical analysis of custom scenario impacts across multiple runs with confidence intervals."""
     
     num_runs = len(all_results)
@@ -180,9 +190,16 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     # Extract baseline win rates from all runs
     baseline_rates = [result.get("baseline_win_rate", 0) for result in all_results]
-    baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(baseline_rates)
+    baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(
+        baseline_rates, confidence
+    )
     
-    print(f"Baseline Win Rate: {baseline_mean:.1f}% [95% CI: {baseline_lower:.1f}% - {baseline_upper:.1f}%]")
+    confidence_label = f"{confidence * 100:g}%"
+    print(
+        f"Baseline Win Rate: {baseline_mean:.1f}% "
+        f"[{confidence_label} CI: "
+        f"{format_confidence_interval(baseline_lower, baseline_upper)}]"
+    )
     print(f"Testing {len(delta_files)} custom scenarios ({points:,} points each)")
     print("=" * 140)
     
@@ -195,6 +212,7 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     for scenario_name in first_run_files.keys():
         improvements = []
         win_rates = []
+        match_improvements = []
         
         # Collect data from all runs for this scenario
         for result in all_results:
@@ -204,22 +222,24 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
                 win_rate = file_results[scenario_name].get("win_rate", 0)
                 improvements.append(improvement)
                 win_rates.append(win_rate)
+                match_improvements.append(
+                    file_results[scenario_name].get("match_improvement", 0)
+                )
         
         if improvements:
             # Point impact statistics
-            point_mean, point_lower, point_upper = calculate_confidence_interval(improvements)
-            
-            # Calculate match win rate impacts
-            match_improvements = []
-            for point_improvement in improvements:
-                match_impact = point_to_match_impact(point_improvement)
-                match_improvements.append(match_impact)
+            point_mean, point_lower, point_upper = calculate_confidence_interval(
+                improvements, confidence
+            )
             
             # Match impact statistics
-            match_mean, match_lower, match_upper = calculate_confidence_interval(match_improvements)
+            match_mean, match_lower, match_upper = calculate_confidence_interval(
+                match_improvements, confidence
+            )
             
-            # Check for statistical significance
-            is_significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
+            _, _, _, raw_p_value = paired_difference_statistics(
+                [0.0] * len(improvements), improvements, confidence
+            )
             
             scenario_data[scenario_name] = {
                 'scenario': scenario_name,
@@ -229,16 +249,30 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
                 'match_mean': match_mean,
                 'match_lower': match_lower,
                 'match_upper': match_upper,
-                'is_significant': is_significant,
+                'raw_p_value': raw_p_value,
+                'adjusted_p_value': None,
+                'is_significant': False,
                 'num_runs': len(improvements)
             }
+
+    comparable = [
+        scenario for scenario in scenario_data.values()
+        if scenario['raw_p_value'] is not None
+    ]
+    adjusted_values = holm_adjust(
+        [scenario['raw_p_value'] for scenario in comparable]
+    )
+    alpha = 1.0 - confidence
+    for scenario, adjusted in zip(comparable, adjusted_values):
+        scenario['adjusted_p_value'] = adjusted
+        scenario['is_significant'] = adjusted < alpha
     
     # Sort by match impact (most positive first)
     scenario_comparisons = list(scenario_data.values())
     scenario_comparisons.sort(key=lambda x: x['match_mean'], reverse=True)
     
     # Print table header
-    print(f"{Colors.BOLD}Scenario File                                      Point Impact  Match Impact  95% Match CI              Significant{Colors.END}")
+    print(f"{Colors.BOLD}Scenario File                                      Point Impact  Match Impact  {confidence_label} Match CI              Holm Sig.{Colors.END}")
     print(f"{Colors.BOLD}                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   {Colors.END}")
     print("-" * 140)
     
@@ -272,18 +306,30 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         if len(display_name) > 50:
             display_name = display_name[:47] + "..."
         
-        print(f"{color}{display_name:<50} {point_mean:+6.2f}%     {match_mean:+6.2f}%     [{match_lower:+6.2f}% - {match_upper:+6.2f}%]       {sig_text:<3}{Colors.END}")
+        match_ci = (
+            f"[{match_lower:+6.2f}% - {match_upper:+6.2f}%]"
+            if match_lower is not None and match_upper is not None
+            else "N/A".ljust(19)
+        )
+        print(f"{color}{display_name:<50} {point_mean:+6.2f}%     {match_mean:+6.2f}%     {match_ci}       {sig_text:<3}{Colors.END}")
     
     print("-" * 140)
     
     # Visual confidence interval chart
     print(f"\n{Colors.BOLD}MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Scenarios):{Colors.END}")
-    print("Match % │")
+    print("Match % |")
     
     # Calculate chart scale using match impact values
     all_values = []
     for scenario in scenario_comparisons:
-        all_values.extend([scenario['match_lower'], scenario['match_mean'], scenario['match_upper']])
+        all_values.extend(
+            value for value in [
+                scenario['match_lower'],
+                scenario['match_mean'],
+                scenario['match_upper'],
+            ]
+            if value is not None
+        )
     
     if all_values:
         chart_min = min(all_values)
@@ -308,8 +354,8 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         for scenario in scenario_comparisons:
             scenario_name = scenario['scenario']
             match_mean = scenario['match_mean']
-            match_lower = scenario['match_lower']
-            match_upper = scenario['match_upper']
+            match_lower = scenario['match_lower'] if scenario['match_lower'] is not None else match_mean
+            match_upper = scenario['match_upper'] if scenario['match_upper'] is not None else match_mean
             is_sig = scenario['is_significant']
             
             # Calculate positions
@@ -329,18 +375,18 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             
             # Draw confidence interval bar
             for i in range(max(0, lower_pos), min(chart_width, upper_pos + 1)):
-                line[i] = '─'
+                line[i] = '-'
             
             # Draw zero line if visible
             if 0 <= zero_pos < chart_width:
-                line[zero_pos] = '┊'
+                line[zero_pos] = '|'
             
             # Draw mean point
             if 0 <= mean_pos < chart_width:
                 if is_sig:
-                    line[mean_pos] = '●'  # Solid dot for significant
+                    line[mean_pos] = '*'  # Significant estimate
                 else:
-                    line[mean_pos] = '○'  # Hollow dot for non-significant
+                    line[mean_pos] = 'o'  # Non-significant estimate
             
             # Color the entire line
             if is_sig:
@@ -348,11 +394,11 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             else:
                 color = Colors.YELLOW
             
-            print(f"         │ {color}{''.join(line)}{Colors.END} {scenario_name}")
+            print(f"         | {color}{''.join(line)}{Colors.END} {scenario_name}")
         
         # Add scale markers (similar to previous function)
-        print(f"         │{'─' * chart_width}")
-        scale_line = ' ' * 9 + '│'
+        print(f"         |{'-' * chart_width}")
+        scale_line = ' ' * 9 + '|'
         
         markers = []
         if chart_range > 0:
@@ -385,7 +431,7 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         print(scale_line)
         
         # Legend
-        print(f"\nLegend: {Colors.GREEN}●{Colors.END} Significant positive  {Colors.RED}●{Colors.END} Significant negative  {Colors.YELLOW}○{Colors.END} Non-significant  ┊ Zero line")
+        print(f"\nLegend: {Colors.GREEN}*{Colors.END} Holm-significant positive  {Colors.RED}*{Colors.END} Holm-significant negative  {Colors.YELLOW}o{Colors.END} Non-significant  | Zero line")
     
     # Summary statistics
     total_scenarios = len(scenario_comparisons)
@@ -394,18 +440,24 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     print(f"\n{Colors.BOLD}STATISTICAL SUMMARY:{Colors.END}")
     print(f"Total scenarios analyzed: {total_scenarios}")
-    print(f"Statistically significant positive impacts: {significant_positive}")
-    print(f"Statistically significant negative impacts: {significant_negative}")
-    
+    print(f"Holm-significant positive impacts: {significant_positive}")
+    print(f"Holm-significant negative impacts: {significant_negative}")
+
     if scenario_comparisons:
         best_scenario = scenario_comparisons[0]
-        print(f"Best scenario: {Colors.GREEN}{best_scenario['scenario']}{Colors.END}")
-        print(f"Point Impact: {Colors.GREEN}{best_scenario['point_mean']:+5.2f}% [{best_scenario['point_lower']:+5.2f}% - {best_scenario['point_upper']:+5.2f}%]{Colors.END}")
-        print(f"Match Impact: {Colors.GREEN}{best_scenario['match_mean']:+5.2f}% [{best_scenario['match_lower']:+5.2f}% - {best_scenario['match_upper']:+5.2f}%]{Colors.END}")
-    
-    # Show significant scenarios for training focus
+        print(f"Top exploratory scenario: {Colors.GREEN}{best_scenario['scenario']}{Colors.END}")
+        point_ci = format_confidence_interval(
+            best_scenario['point_lower'], best_scenario['point_upper'], 2
+        )
+        match_ci = format_confidence_interval(
+            best_scenario['match_lower'], best_scenario['match_upper'], 2
+        )
+        print(f"Point Impact: {Colors.GREEN}{best_scenario['point_mean']:+5.2f}% [{point_ci}]{Colors.END}")
+        print(f"Match Impact: {Colors.GREEN}{best_scenario['match_mean']:+5.2f}% [{match_ci}]{Colors.END}")
+
+    # Show model-implied effects without presenting them as empirical guidance.
     if significant_scenarios:
-        print(f"\n{Colors.BOLD}RECOMMENDED TRAINING SCENARIOS:{Colors.END}")
+        print(f"\n{Colors.BOLD}HOLM-SIGNIFICANT MODEL EFFECTS (EXPLORATORY):{Colors.END}")
         for i, scenario in enumerate(significant_scenarios[:5]):  # Top 5
             scenario_name = scenario['scenario']
             point_mean = scenario['point_mean']
@@ -417,10 +469,18 @@ def print_custom_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             
             color = Colors.GREEN if match_mean > 0 else Colors.RED
             print(f"{i+1}. {color}{scenario_name}:{Colors.END}")
-            print(f"   {color}Point: {point_mean:+5.2f}% [{point_lower:+5.2f}% - {point_upper:+5.2f}%] | Match: {match_mean:+5.2f}% [{match_lower:+5.2f}% - {match_upper:+5.2f}%]{Colors.END}")
+            point_ci = format_confidence_interval(point_lower, point_upper, 2)
+            match_ci = format_confidence_interval(match_lower, match_upper, 2)
+            print(f"   {color}Point: {point_mean:+5.2f}% [{point_ci}] | Match: {match_mean:+5.2f}% [{match_ci}]{Colors.END}")
 
 
-def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_durations: List[float], change_value: float, points: int):
+def print_skills_statistical_analysis(
+    all_results: List[Dict[str, Any]],
+    all_durations: List[float],
+    change_value: float,
+    points: int,
+    confidence: float,
+):
     """Print a statistical analysis of skill impacts across multiple runs with confidence intervals."""
     
     num_runs = len(all_results)
@@ -431,9 +491,16 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     # Extract baseline win rates from all runs
     baseline_rates = [result.get("baseline_win_rate", 0) for result in all_results]
-    baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(baseline_rates)
+    baseline_mean, baseline_lower, baseline_upper = calculate_confidence_interval(
+        baseline_rates, confidence
+    )
     
-    print(f"Baseline Win Rate: {baseline_mean:.1f}% [95% CI: {baseline_lower:.1f}% - {baseline_upper:.1f}%]")
+    confidence_label = f"{confidence * 100:g}%"
+    print(
+        f"Baseline Win Rate: {baseline_mean:.1f}% "
+        f"[{confidence_label} CI: "
+        f"{format_confidence_interval(baseline_lower, baseline_upper)}]"
+    )
     change_pct = change_value * 100
     print(f"Testing {change_pct:+.1f}% improvement on {all_results[0]['total_parameters']} parameters ({points:,} points each)")
     print("=" * 140)
@@ -446,6 +513,7 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     for param_name in first_run_params.keys():
         improvements = []
+        match_improvements = []
         
         # Collect improvement values from all runs for this parameter
         for result in all_results:
@@ -453,21 +521,23 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             if param_name in params:
                 improvement = params[param_name].get("improvement", 0)
                 improvements.append(improvement)
+                match_improvements.append(
+                    params[param_name].get("match_improvement", 0)
+                )
         
         if improvements:
-            mean, lower_ci, upper_ci = calculate_confidence_interval(improvements)
-            
-            # Calculate match win rate impacts for all point improvements
-            match_improvements = []
-            for point_improvement in improvements:
-                match_impact = point_to_match_impact(point_improvement)
-                match_improvements.append(match_impact)
+            mean, lower_ci, upper_ci = calculate_confidence_interval(
+                improvements, confidence
+            )
             
             # Calculate match impact statistics
-            match_mean, match_lower, match_upper = calculate_confidence_interval(match_improvements)
+            match_mean, match_lower, match_upper = calculate_confidence_interval(
+                match_improvements, confidence
+            )
             
-            # Check for statistical significance based on match impact CI
-            is_significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
+            _, _, _, raw_p_value = paired_difference_statistics(
+                [0.0] * len(improvements), improvements, confidence
+            )
             
             skill_data[param_name] = {
                 'parameter': param_name,
@@ -477,16 +547,30 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
                 'match_mean': match_mean,
                 'match_lower': match_lower,
                 'match_upper': match_upper,
-                'is_significant': is_significant,
+                'raw_p_value': raw_p_value,
+                'adjusted_p_value': None,
+                'is_significant': False,
                 'num_runs': len(improvements)
             }
+
+    comparable = [
+        skill for skill in skill_data.values()
+        if skill['raw_p_value'] is not None
+    ]
+    adjusted_values = holm_adjust(
+        [skill['raw_p_value'] for skill in comparable]
+    )
+    alpha = 1.0 - confidence
+    for skill, adjusted in zip(comparable, adjusted_values):
+        skill['adjusted_p_value'] = adjusted
+        skill['is_significant'] = adjusted < alpha
     
     # Sort by mean improvement (most positive impact first, then most negative)
     skill_comparisons = list(skill_data.values())
     skill_comparisons.sort(key=lambda x: x['mean_improvement'], reverse=True)
     
     # Print table header
-    print(f"{Colors.BOLD}Skill Parameter                                    Point Impact  Match Impact  95% Match CI              Significant{Colors.END}")
+    print(f"{Colors.BOLD}Skill Parameter                                    Point Impact  Match Impact  {confidence_label} Match CI              Holm Sig.{Colors.END}")
     print(f"{Colors.BOLD}                                                   (% improve)   (% improve)   (Lower - Upper)           (Yes/No)   {Colors.END}")
     print("-" * 140)
     
@@ -520,13 +604,18 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         # Format parameter name (truncate if too long)
         display_name = format_parameter_name(param_name)
         
-        print(f"{color}{display_name:<50} {mean_imp:+6.2f}%     {match_mean:+6.2f}%     [{match_lower:+6.2f}% - {match_upper:+6.2f}%]       {sig_text:<3}{Colors.END}")
+        match_ci = (
+            f"[{match_lower:+6.2f}% - {match_upper:+6.2f}%]"
+            if match_lower is not None and match_upper is not None
+            else "N/A".ljust(19)
+        )
+        print(f"{color}{display_name:<50} {mean_imp:+6.2f}%     {match_mean:+6.2f}%     {match_ci}       {sig_text:<3}{Colors.END}")
     
     print("-" * 140)
     
     # Visual confidence interval chart
     print(f"\n{Colors.BOLD}MATCH WIN RATE CONFIDENCE INTERVAL CHART (All Skills):{Colors.END}")
-    print("Match % │")
+    print("Match % |")
     
     # Use all skills, already sorted by mean improvement
     chart_skills = skill_comparisons
@@ -534,7 +623,14 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     # Calculate chart scale using match impact values
     all_values = []
     for skill in chart_skills:
-        all_values.extend([skill['match_lower'], skill['match_mean'], skill['match_upper']])
+        all_values.extend(
+            value for value in [
+                skill['match_lower'],
+                skill['match_mean'],
+                skill['match_upper'],
+            ]
+            if value is not None
+        )
     
     if all_values:
         chart_min = min(all_values)
@@ -560,8 +656,8 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             param_name = format_parameter_name(skill['parameter'])
             mean_imp = skill['mean_improvement']  # Keep for significance color coding
             match_mean = skill['match_mean']
-            match_lower = skill['match_lower']
-            match_upper = skill['match_upper']
+            match_lower = skill['match_lower'] if skill['match_lower'] is not None else match_mean
+            match_upper = skill['match_upper'] if skill['match_upper'] is not None else match_mean
             is_sig = skill['is_significant']
             
             # Calculate positions (0 to chart_width) using match values
@@ -581,18 +677,18 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             
             # Draw confidence interval bar
             for i in range(max(0, lower_pos), min(chart_width, upper_pos + 1)):
-                line[i] = '─'
+                line[i] = '-'
             
             # Draw zero line if visible
             if 0 <= zero_pos < chart_width:
-                line[zero_pos] = '┊'
+                line[zero_pos] = '|'
             
             # Draw mean point (overwrites other symbols)
             if 0 <= mean_pos < chart_width:
                 if is_sig:
-                    line[mean_pos] = '●'  # Solid dot for significant
+                    line[mean_pos] = '*'  # Significant estimate
                 else:
-                    line[mean_pos] = '○'  # Hollow dot for non-significant
+                    line[mean_pos] = 'o'  # Non-significant estimate
             
             # Color the entire line
             if is_sig:
@@ -603,11 +699,11 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             # Use full parameter name (no truncation)
             display_name = param_name
             
-            print(f"         │ {color}{''.join(line)}{Colors.END} {display_name}")
+            print(f"         | {color}{''.join(line)}{Colors.END} {display_name}")
         
         # Add scale markers
-        print(f"         │{'─' * chart_width}")
-        scale_line = ' ' * 9 + '│'
+        print(f"         |{'-' * chart_width}")
+        scale_line = ' ' * 9 + '|'
         
         # Add scale markers at key points
         markers = []
@@ -654,7 +750,7 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
         print(scale_line)
         
         # Legend
-        print(f"\nLegend: {Colors.GREEN}●{Colors.END} Significant positive  {Colors.RED}●{Colors.END} Significant negative  {Colors.YELLOW}○{Colors.END} Non-significant  ┊ Zero line")
+        print(f"\nLegend: {Colors.GREEN}*{Colors.END} Holm-significant positive  {Colors.RED}*{Colors.END} Holm-significant negative  {Colors.YELLOW}o{Colors.END} Non-significant  | Zero line")
     
     # Summary statistics
     total_skills = len(skill_comparisons)
@@ -664,19 +760,25 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
     
     print(f"\n{Colors.BOLD}STATISTICAL SUMMARY:{Colors.END}")
     print(f"Total skills analyzed: {total_skills}")
-    print(f"Statistically significant positive impacts: {significant_positive}")
-    print(f"Statistically significant negative impacts: {significant_negative}")  
+    print(f"Holm-significant positive impacts: {significant_positive}")
+    print(f"Holm-significant negative impacts: {significant_negative}")
     print(f"High-impact skills (>1% improvement): {high_impact_skills}")
     
     if skill_comparisons:
         top_skill = skill_comparisons[0]
-        print(f"Most impactful skill: {Colors.GREEN}{format_parameter_name(top_skill['parameter'])}{Colors.END}")
-        print(f"Point Impact: {Colors.GREEN}{top_skill['mean_improvement']:+5.2f}% [{top_skill['lower_ci']:+5.2f}% - {top_skill['upper_ci']:+5.2f}%]{Colors.END}")
-        print(f"Match Impact: {Colors.GREEN}{top_skill['match_mean']:+5.2f}% [{top_skill['match_lower']:+5.2f}% - {top_skill['match_upper']:+5.2f}%]{Colors.END}")
+        print(f"Top exploratory skill: {Colors.GREEN}{format_parameter_name(top_skill['parameter'])}{Colors.END}")
+        point_ci = format_confidence_interval(
+            top_skill['lower_ci'], top_skill['upper_ci'], 2
+        )
+        match_ci = format_confidence_interval(
+            top_skill['match_lower'], top_skill['match_upper'], 2
+        )
+        print(f"Point Impact: {Colors.GREEN}{top_skill['mean_improvement']:+5.2f}% [{point_ci}]{Colors.END}")
+        print(f"Match Impact: {Colors.GREEN}{top_skill['match_mean']:+5.2f}% [{match_ci}]{Colors.END}")
     
     # Show only statistically significant high-impact skills
     if significant_skills:
-        print(f"\n{Colors.BOLD}STATISTICALLY SIGNIFICANT SKILLS (FOCUS TRAINING HERE):{Colors.END}")
+        print(f"\n{Colors.BOLD}HOLM-SIGNIFICANT MODEL EFFECTS (EXPLORATORY):{Colors.END}")
         high_impact_significant = [s for s in significant_skills if abs(s['mean_improvement']) > 0.5][:10]
         for i, skill in enumerate(high_impact_significant):
             param_name = skill['parameter']
@@ -689,7 +791,9 @@ def print_skills_statistical_analysis(all_results: List[Dict[str, Any]], all_dur
             
             color = Colors.GREEN if mean_imp > 0 else Colors.RED
             print(f"{i+1:2d}. {color}{format_parameter_name(param_name)}:{Colors.END}")
-            print(f"    {color}Point: {mean_imp:+5.2f}% [{lower_ci:+5.2f}% - {upper_ci:+5.2f}%] | Match: {match_mean:+5.2f}% [{match_lower:+5.2f}% - {match_upper:+5.2f}%]{Colors.END}")
+            point_ci = format_confidence_interval(lower_ci, upper_ci, 2)
+            match_ci = format_confidence_interval(match_lower, match_upper, 2)
+            print(f"    {color}Point: {mean_imp:+5.2f}% [{point_ci}] | Match: {match_mean:+5.2f}% [{match_ci}]{Colors.END}")
 
 
 def auto_discover_teams() -> List[str]:
@@ -706,15 +810,9 @@ def auto_discover_teams() -> List[str]:
     for file in team_files:
         try:
             team = Team.from_yaml_file(file)
-            # Validate that the team has complete probability distributions
-            if (team.serve_probabilities and 
-                team.receive_probabilities and 
-                team.attack_probabilities and 
-                team.set_probabilities and
-                team.block_probabilities and 
-                team.dig_probabilities):
+            if not validate_team_configuration(team):
                 valid_teams.append(file)
-        except:
+        except (OSError, ValueError, TypeError):
             continue
             
     return valid_teams
@@ -729,7 +827,7 @@ def auto_discover_results() -> List[str]:
         try:
             SimulationResults.from_json_file(file)
             valid_results.append(file)
-        except:
+        except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
             continue
             
     return valid_results
@@ -739,14 +837,20 @@ def get_team_or_default(team_arg: Optional[str], default_name: str = "Default Te
     """Get team from argument or create default"""
     if team_arg:
         if Path(team_arg + '.yaml').exists():
-            return Team.from_yaml_file(team_arg + '.yaml')
+            team = Team.from_yaml_file(team_arg + '.yaml')
         elif Path(team_arg).exists():
-            return Team.from_yaml_file(team_arg)
+            team = Team.from_yaml_file(team_arg)
         else:
             raise FileNotFoundError(f"Team file not found: {team_arg}")
     else:
-        # Use basic template as default
-        return Team.from_dict(get_basic_template(default_name))
+        team = Team.from_dict(get_basic_template(default_name))
+
+    errors = validate_team_configuration(team)
+    if errors:
+        raise ValueError(
+            f"Invalid team configuration '{team.name}': " + "; ".join(errors)
+        )
+    return team
 
 
 def cmd_skills(args):
@@ -768,6 +872,14 @@ def cmd_skills(args):
         else:
             print("Error: skills command accepts 0-2 teams", file=sys.stderr)
             return 1
+
+        for candidate in (team, opponent):
+            errors = validate_team_configuration(candidate)
+            if errors:
+                raise ValueError(
+                    f"Invalid team configuration '{candidate.name}': "
+                    + "; ".join(errors)
+                )
         
         # ALWAYS default to 200k points, 5% improvement, 5 runs unless explicitly overridden
         # Determine points - default is ALWAYS 200k unless explicitly overridden
@@ -788,6 +900,16 @@ def cmd_skills(args):
         
         # Determine runs - default is ALWAYS 5 unless explicitly overridden
         num_runs = args.runs or 5
+        if num_runs < 1:
+            raise ValueError("runs must be at least 1")
+        master_seed = (
+            args.seed if args.seed is not None else secrets.randbits(64)
+        )
+        seed_stream = random.Random(master_seed)
+        run_seeds = [seed_stream.getrandbits(64) for _ in range(num_runs)]
+        holdout_run_seeds = [
+            seed_stream.getrandbits(64) for _ in range(num_runs)
+        ]
         
         # Parse custom comma-separated list into array if provided
         custom_files = None
@@ -814,7 +936,10 @@ def cmd_skills(args):
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     # Submit all tasks
                     futures = [
-                        executor.submit(run_single_custom_analysis, team, opponent, custom_files, points, i+1)
+                        executor.submit(
+                            run_single_custom_analysis, team, opponent,
+                            custom_files, points, i + 1, run_seeds[i]
+                        )
                         for i in range(num_runs)
                     ]
                     
@@ -828,9 +953,43 @@ def cmd_skills(args):
                         run_data, duration = future.result()
                         all_results.append(run_data)
                         all_durations.append(duration)
-                        print(f"\r{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
-                    
+                        print(f"\r{Colors.GREEN}Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
+
                     print()  # Final newline after all analyses complete
+                    all_results.sort(key=lambda result: result["run_number"])
+
+                initial_statistics = aggregate_effect_statistics(
+                    all_results, "file_results", args.confidence
+                )
+                file_by_stem = {
+                    Path(file_name).stem: file_name
+                    for file_name in custom_files
+                }
+                holdout_files = [
+                    file_by_stem[row["name"]] for row in sorted(
+                        initial_statistics,
+                        key=lambda row: row["match_mean"],
+                        reverse=True,
+                    )[:3]
+                ]
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    holdout_futures = [
+                        executor.submit(
+                            run_single_custom_analysis, team, opponent,
+                            holdout_files, points, i + 1,
+                            holdout_run_seeds[i]
+                        )
+                        for i in range(num_runs)
+                    ]
+                    holdout_results = [
+                        future.result()[0] for future in as_completed(
+                            holdout_futures
+                        )
+                    ]
+                holdout_results.sort(key=lambda result: result["run_number"])
+                holdout_statistics = aggregate_effect_statistics(
+                    holdout_results, "file_results", args.confidence
+                )
                 
                 # Display statistical analysis
                 if args.format == 'json':
@@ -840,6 +999,10 @@ def cmd_skills(args):
                         "num_runs": num_runs,
                         "scenario_files": custom_files,
                         "points_per_test": points,
+                        "master_seed": master_seed,
+                        "effect_statistics": initial_statistics,
+                        "holdout_statistics": holdout_statistics,
+                        "holdout_seeds": holdout_run_seeds,
                         "individual_runs": all_results,
                         "execution_summary": {
                             "total_duration": time.time() - total_start_time,
@@ -849,7 +1012,13 @@ def cmd_skills(args):
                     }
                     print(json.dumps(combined_results, indent=2))
                 else:
-                    print_custom_statistical_analysis(all_results, all_durations, custom_files, points)
+                    print_custom_statistical_analysis(
+                        all_results, all_durations, custom_files, points,
+                        args.confidence
+                    )
+                    print_holdout_confirmation(
+                        holdout_statistics, args.confidence
+                    )
                     
                     total_duration = time.time() - total_start_time
                     avg_duration = statistics.mean(all_durations)
@@ -858,11 +1027,12 @@ def cmd_skills(args):
                     print(f"Total script execution time: {Colors.GREEN}{total_duration:.2f} seconds{Colors.END}")
                     print(f"Average analysis time: {Colors.GREEN}{avg_duration:.2f} seconds{Colors.END}")
                     print(f"Number of runs completed: {Colors.GREEN}{num_runs}{Colors.END}")
+                    print(f"Master seed: {Colors.GREEN}{master_seed}{Colors.END}")
                     
                     # Statistical note
-                    print(f"\n{Colors.YELLOW}Statistical Analysis: Confidence intervals show the range where the true scenario impact likely falls.")
-                    print(f"Scenarios marked 'YES' have statistically significant impacts (confidence interval doesn't include 0).") 
-                    print(f"Focus training on scenarios with significant positive impacts.{Colors.END}")
+                    print(f"\n{Colors.YELLOW}Statistical Analysis: Intervals quantify Monte Carlo uncertainty for these fixed model inputs.")
+                    print(f"Scenarios marked 'YES' pass Holm correction across the tested scenario family.")
+                    print(f"Rankings are exploratory and are not empirical training recommendations.{Colors.END}")
                 
             except KeyboardInterrupt:
                 print(f"\n{Colors.RED}Custom scenario analysis interrupted by user{Colors.END}")
@@ -888,7 +1058,11 @@ def cmd_skills(args):
                 with ThreadPoolExecutor(max_workers=max_workers) as executor:
                     # Submit all tasks
                     futures = [
-                        executor.submit(run_single_skills_analysis, team, opponent, change_value, points, not args.no_parallel, i+1)
+                        executor.submit(
+                            run_single_skills_analysis, team, opponent,
+                            change_value, points, not args.no_parallel,
+                            i + 1, run_seeds[i]
+                        )
                         for i in range(num_runs)
                     ]
                     
@@ -902,9 +1076,41 @@ def cmd_skills(args):
                         run_data, duration = future.result()
                         all_results.append(run_data)
                         all_durations.append(duration)
-                        print(f"\r{Colors.GREEN}✓ Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
-                    
+                        print(f"\r{Colors.GREEN}Analysis {completed_count} completed in {duration:.2f}s ({completed_count}/{num_runs}){Colors.END}", end="", flush=True)
+
                     print()  # Final newline after all analyses complete
+                    all_results.sort(key=lambda result: result["run_number"])
+
+                initial_statistics = aggregate_effect_statistics(
+                    all_results, "parameter_improvements", args.confidence
+                )
+                holdout_parameters = [
+                    row["name"] for row in sorted(
+                        initial_statistics,
+                        key=lambda row: row["match_mean"],
+                        reverse=True,
+                    )[:3]
+                ]
+                with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    holdout_futures = [
+                        executor.submit(
+                            run_single_skills_analysis, team, opponent,
+                            change_value, points, not args.no_parallel,
+                            i + 1, holdout_run_seeds[i],
+                            holdout_parameters
+                        )
+                        for i in range(num_runs)
+                    ]
+                    holdout_results = [
+                        future.result()[0] for future in as_completed(
+                            holdout_futures
+                        )
+                    ]
+                holdout_results.sort(key=lambda result: result["run_number"])
+                holdout_statistics = aggregate_effect_statistics(
+                    holdout_results, "parameter_improvements",
+                    args.confidence
+                )
                 
                 # Display statistical analysis
                 if args.format == 'json':
@@ -914,6 +1120,10 @@ def cmd_skills(args):
                         "num_runs": num_runs,
                         "change_value": change_value,
                         "points_per_test": points,
+                        "master_seed": master_seed,
+                        "effect_statistics": initial_statistics,
+                        "holdout_statistics": holdout_statistics,
+                        "holdout_seeds": holdout_run_seeds,
                         "individual_runs": all_results,
                         "execution_summary": {
                             "total_duration": time.time() - total_start_time,
@@ -923,7 +1133,13 @@ def cmd_skills(args):
                     }
                     print(json.dumps(combined_results, indent=2))
                 else:
-                    print_skills_statistical_analysis(all_results, all_durations, change_value, points)
+                    print_skills_statistical_analysis(
+                        all_results, all_durations, change_value, points,
+                        args.confidence
+                    )
+                    print_holdout_confirmation(
+                        holdout_statistics, args.confidence
+                    )
                     
                     total_duration = time.time() - total_start_time
                     avg_duration = statistics.mean(all_durations)
@@ -932,11 +1148,12 @@ def cmd_skills(args):
                     print(f"Total script execution time: {Colors.GREEN}{total_duration:.2f} seconds{Colors.END}")
                     print(f"Average analysis time: {Colors.GREEN}{avg_duration:.2f} seconds{Colors.END}")
                     print(f"Number of runs completed: {Colors.GREEN}{num_runs}{Colors.END}")
+                    print(f"Master seed: {Colors.GREEN}{master_seed}{Colors.END}")
                     
                     # Statistical note
-                    print(f"\n{Colors.YELLOW}Statistical Analysis: Confidence intervals show the range where the true skill impact likely falls.")
-                    print(f"Skills marked 'YES' have statistically significant impacts (confidence interval doesn't include 0).")
-                    print(f"Focus training on skills with significant positive impacts and wide confidence intervals.{Colors.END}")
+                    print(f"\n{Colors.YELLOW}Statistical Analysis: Intervals quantify Monte Carlo uncertainty for these fixed model inputs.")
+                    print(f"Skills marked 'YES' pass Holm correction across the tested parameter family.")
+                    print(f"Rankings are exploratory; the model has not been calibrated to real match data.{Colors.END}")
                 
             except KeyboardInterrupt:
                 print(f"\n{Colors.RED}Statistical analysis interrupted by user{Colors.END}")
@@ -980,6 +1197,14 @@ def cmd_compare(args):
         if len(teams) < 2:
             print("Error: Need at least 2 teams to compare", file=sys.stderr)
             return 1
+
+        for candidate in teams:
+            errors = validate_team_configuration(candidate)
+            if errors:
+                raise ValueError(
+                    f"Invalid team configuration '{candidate.name}': "
+                    + "; ".join(errors)
+                )
         
         # Determine points based on speed options
         if args.quick:
@@ -990,7 +1215,9 @@ def cmd_compare(args):
             points = args.points or 50000
         
         # Run comparisons using existing compare_teams functionality
-        results = compare_teams(teams, points_per_matchup=points)
+        results = compare_teams(
+            teams, points_per_matchup=points, seed=args.seed
+        )
         
         if args.format == 'json':
             print(json.dumps(results, indent=2))
@@ -1024,6 +1251,14 @@ def cmd_simulate(args):
         else:
             print("Error: simulate command accepts 0-2 teams", file=sys.stderr)
             return 1
+
+        for candidate in (team_a, team_b):
+            errors = validate_team_configuration(candidate)
+            if errors:
+                raise ValueError(
+                    f"Invalid team configuration '{candidate.name}': "
+                    + "; ".join(errors)
+                )
         
         # Determine points based on speed options
         if args.quick:
@@ -1065,7 +1300,8 @@ def cmd_simulate(args):
             team_a_name=sim_data['team_a_name'],
             team_b_name=sim_data['team_b_name'],
             total_points=sim_data['total_points'],
-            points=point_results
+            points=point_results,
+            seed=sim_data['seed'],
         )
         
         # Save results
@@ -1149,7 +1385,7 @@ def cmd_create_team(args):
         
         # Validate the created team
         team = Team.from_yaml_file(file_path)
-        print(f"✓ Team validation successful")
+        print("Team validation successful")
         
         return 0
         
@@ -1163,7 +1399,7 @@ def cmd_validate(args):
     """Handle 'bvsim validate' command"""
     try:
         team = Team.from_yaml_file(args.team)
-        print(f"✓ Team '{team.name}' is valid")
+        print(f"Team '{team.name}' is valid")
         
         if args.format == 'json':
             print(json.dumps({"valid": True, "team_name": team.name}, indent=2))
@@ -1171,7 +1407,7 @@ def cmd_validate(args):
         return 0
         
     except Exception as e:
-        print(f"✗ Team validation failed: {e}", file=sys.stderr)
+        print(f"Team validation failed: {e}", file=sys.stderr)
         
         if args.format == 'json':
             print(json.dumps({"valid": False, "error": str(e)}, indent=2))
@@ -1201,7 +1437,7 @@ def cmd_examples(args):
         num_rallies = args.count
         
         print(f"Rally Examples ({num_rallies} rallies): {team_a.name} vs {team_b.name}")
-        print(f"Format: [Winner] Team.Action(Quality)→Team.Action(Quality)... → Point Type")
+        print("Format: [Winner] Team.Action(Quality)->Team.Action(Quality)... -> Point Type")
         print("")
         
         # Generate rallies
@@ -1227,14 +1463,14 @@ def cmd_examples(args):
                 quality_abbrev = {
                     'excellent': 'exc', 'good': 'gd', 'poor': 'pr', 'error': 'err',
                     'ace': 'ace', 'in_play': 'ok', 'kill': 'kill', 'defended': 'def',
-                    'stuff': 'stuff', 'deflection_to_attack': 'def→att', 
-                    'deflection_to_defense': 'def→def', 'no_touch': 'miss'
+                    'stuff': 'stuff', 'deflection_to_attack': 'def->att',
+                    'deflection_to_defense': 'def->def', 'no_touch': 'miss'
                 }.get(state.quality, state.quality)
                 
                 state_parts.append(f"{state.team}.{action_abbrev}({quality_abbrev})")
             
-            rally_str += "→".join(state_parts)
-            rally_str += f" → {point.point_type}"
+            rally_str += "->".join(state_parts)
+            rally_str += f" -> {point.point_type}"
             
             print(f"{i+1:2d}. {rally_str}")
         
@@ -1275,6 +1511,7 @@ def main(argv=None):
     parser_skills.add_argument('--no-parallel', action='store_true', help='Disable parallel processing (for testing)')
     parser_skills.add_argument('--runs', type=int, help='Number of analysis runs for statistical comparison (overrides default of 5)')
     parser_skills.add_argument('--confidence', type=float, default=0.95, help='Confidence level for intervals (default: 0.95)')
+    parser_skills.add_argument('--seed', type=int, help='Master random seed for reproducibility')
     parser_skills.set_defaults(func=cmd_skills)
     
     # bvsim compare - team comparisons
@@ -1285,6 +1522,7 @@ def main(argv=None):
     parser_compare.add_argument('--accurate', action='store_true', help='High precision comparison (200k points)')
     parser_compare.add_argument('--points', type=int, help='Points per matchup')
     parser_compare.add_argument('--format', choices=['json', 'text'], default='text', help='Output format')
+    parser_compare.add_argument('--seed', type=int, help='Random seed for reproducibility')
     parser_compare.set_defaults(func=cmd_compare)
     
     # bvsim simulate - run simulations

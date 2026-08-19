@@ -2,6 +2,8 @@ from __future__ import annotations
 import io
 import json
 import os
+import random
+import secrets
 import traceback
 from typing import Any, Dict, List, Optional
 from pathlib import Path
@@ -14,6 +16,10 @@ from bvsim_cli.comparison import compare_teams, format_comparison_text
 from bvsim_cli.simulation import run_large_simulation
 from bvsim_stats.models import SimulationResults, PointResult
 from bvsim_stats.analysis import analyze_simulation_results, full_skill_analysis, multi_team_skill_analysis
+from bvsim_stats.inference import (
+    aggregate_effect_statistics,
+    mean_confidence_interval,
+)
 
 TEAM_GLOB_PATTERNS = ["team_*.yaml", "team_*.yml", "*.yaml", "*.yml"]
 
@@ -487,6 +493,7 @@ def register_routes(app: Flask) -> None:
         accurate = data.get("accurate")
         points = data.get("points")
         runs = data.get("runs")
+        requested_seed = data.get("seed")
         confidence = float(data.get("confidence") or 0.95)
         try:
             used_defaults = False
@@ -531,83 +538,164 @@ def register_routes(app: Flask) -> None:
                     change_value = float(improve)
             else:
                 change_value = 0.05
+            from concurrent.futures import ThreadPoolExecutor
+            num_runs = int(runs or 5)
+            if num_runs < 1:
+                raise ValueError("runs must be at least 1")
+            master_seed = (
+                int(requested_seed)
+                if requested_seed is not None
+                else secrets.randbits(64)
+            )
+            seed_stream = random.Random(master_seed)
+            run_seeds = [
+                seed_stream.getrandbits(64) for _ in range(num_runs)
+            ]
+            holdout_run_seeds = [
+                seed_stream.getrandbits(64) for _ in range(num_runs)
+            ]
+
             if custom_files:
-                from concurrent.futures import ThreadPoolExecutor
-                import statistics, math
                 clean_files = [f for f in custom_files if f]
-                num_runs = int(runs or 5)
-                if num_runs < 1:
-                    num_runs = 1
-                def run_single():
-                    return multi_team_skill_analysis(base_team=team, opponent=opponent, team_variant_files=clean_files, points_per_test=points_per_test)
-                all_results = []
-                if num_runs == 1:
-                    all_results.append(run_single())
-                else:
-                    max_workers = min(num_runs, 8)
-                    with ThreadPoolExecutor(max_workers=max_workers) as ex:
-                        futures = [ex.submit(run_single) for _ in range(num_runs)]
-                        for fut in futures:
-                            try:
-                                all_results.append(fut.result())
-                            except Exception:
-                                traceback.print_exc()
+                def run_single(run_seed):
+                    return multi_team_skill_analysis(
+                        base_team=team,
+                        opponent=opponent,
+                        team_variant_files=clean_files,
+                        points_per_test=points_per_test,
+                        seed=run_seed,
+                    )
+                with ThreadPoolExecutor(
+                    max_workers=min(num_runs, 8)
+                ) as executor:
+                    all_results = list(
+                        executor.map(run_single, run_seeds)
+                    )
                 if not all_results:
                     return error_response("No results produced", 500)
                 baseline_rates = [r.get("baseline_win_rate", 0.0) for r in all_results]
-                def ci(values):
-                    if not values: return 0.0, 0.0, 0.0
-                    if len(values) < 2: v = values[0]; return v, v, v
-                    n = len(values)
-                    mean = statistics.mean(values)
-                    if n == 2:
-                        half = abs(values[1]-values[0])/2
-                        return mean, mean-half, mean+half
-                    stdev = statistics.stdev(values)
-                    if n >= 30:
-                        z = 1.96 if confidence >= 0.95 else 1.645
-                        moe = z * (stdev / math.sqrt(n))
-                    else:
-                        z = 2.262 if n==10 else 2.571 if n==5 else 1.96
-                        moe = z * (stdev / math.sqrt(n))
-                    return mean, mean-moe, mean+moe
-                baseline_mean, baseline_lower, baseline_upper = ci(baseline_rates)
-                first_files = all_results[0].get("file_results", {})
-                skills = []
-                for stem in first_files.keys():
-                    improvements = []
-                    for r in all_results:
-                        fr = r.get("file_results", {})
-                        if stem in fr:
-                            improvements.append(fr[stem].get("improvement", 0.0))
-                    if not improvements:
-                        continue
-                    point_mean, point_lower, point_upper = ci(improvements)
-                    match_impacts = []
-                    for imp in improvements:
-                        try:
-                            from bvsim.cli import point_to_match_impact
-                            match_impacts.append(point_to_match_impact(imp))
-                        except Exception:
-                            match_impacts.append(imp)
-                    match_mean, match_lower, match_upper = ci(match_impacts)
-                    significant = (match_lower > 0 and match_upper > 0) or (match_lower < 0 and match_upper < 0)
-                    skills.append({
-                        "parameter": stem,
-                        "point": {"mean": point_mean, "lower": point_lower, "upper": point_upper},
-                        "match": {"mean": match_mean, "lower": match_lower, "upper": match_upper},
-                        "significant": significant,
-                        "runs": len(improvements)
-                    })
+                baseline_mean, baseline_lower, baseline_upper = (
+                    mean_confidence_interval(baseline_rates, confidence)
+                )
+                effect_statistics = aggregate_effect_statistics(
+                    all_results, "file_results", confidence
+                )
+                file_by_stem = {
+                    Path(file_name).stem: file_name
+                    for file_name in clean_files
+                }
+                holdout_files = [
+                    file_by_stem[effect["name"]]
+                    for effect in sorted(
+                        effect_statistics,
+                        key=lambda effect: effect["match_mean"],
+                        reverse=True,
+                    )[:3]
+                ]
+                def run_holdout(run_seed):
+                    return multi_team_skill_analysis(
+                        base_team=team,
+                        opponent=opponent,
+                        team_variant_files=holdout_files,
+                        points_per_test=points_per_test,
+                        seed=run_seed,
+                    )
+                with ThreadPoolExecutor(
+                    max_workers=min(num_runs, 8)
+                ) as executor:
+                    holdout_results = list(
+                        executor.map(run_holdout, holdout_run_seeds)
+                    )
+                holdout_statistics = aggregate_effect_statistics(
+                    holdout_results, "file_results", confidence
+                )
+                skills = [{
+                    "parameter": effect["name"],
+                    "point": {
+                        "mean": effect["point_mean"],
+                        "lower": effect["point_lower"],
+                        "upper": effect["point_upper"],
+                    },
+                    "match": {
+                        "mean": effect["match_mean"],
+                        "lower": effect["match_lower"],
+                        "upper": effect["match_upper"],
+                    },
+                    "raw_p_value": effect["raw_p_value"],
+                    "adjusted_p_value": effect["adjusted_p_value"],
+                    "significant": effect["holm_significant"],
+                    "runs": effect["num_runs"],
+                } for effect in effect_statistics]
                 skills.sort(key=lambda s: s["match"]["mean"], reverse=True)
                 response = {"statistical_analysis": True,
                             "skills": skills,
+                            "holdout_statistics": holdout_statistics,
+                            "holdout_seeds": holdout_run_seeds,
                             "baseline": {"mean": baseline_mean, "lower": baseline_lower, "upper": baseline_upper},
-                            "parameters": {"points": points_per_test, "change_value": change_value, "custom": True, "runs": num_runs, "confidence": confidence, "used_defaults": used_defaults},
+                            "parameters": {"points": points_per_test, "change_value": change_value, "custom": True, "runs": num_runs, "confidence": confidence, "used_defaults": used_defaults, "master_seed": master_seed},
                             "teams": {"team": team.name, "opponent": opponent.name}}
             else:
-                results = full_skill_analysis(team=team, opponent=opponent, change_value=change_value, points_per_test=points_per_test, parallel=True)
-                response = {"parameters": {"points": points_per_test, "change_value": change_value, "custom": False, "used_defaults": used_defaults}, "results": results, "teams": {"team": team.name, "opponent": opponent.name}}
+                def run_single(run_seed):
+                    return full_skill_analysis(
+                        team=team,
+                        opponent=opponent,
+                        change_value=change_value,
+                        points_per_test=points_per_test,
+                        parallel=False,
+                        seed=run_seed,
+                    )
+                with ThreadPoolExecutor(
+                    max_workers=min(num_runs, 8)
+                ) as executor:
+                    all_results = list(
+                        executor.map(run_single, run_seeds)
+                    )
+                effect_statistics = aggregate_effect_statistics(
+                    all_results, "parameter_improvements", confidence
+                )
+                holdout_parameters = [
+                    effect["name"] for effect in sorted(
+                        effect_statistics,
+                        key=lambda effect: effect["match_mean"],
+                        reverse=True,
+                    )[:3]
+                ]
+                def run_holdout(run_seed):
+                    return full_skill_analysis(
+                        team=team,
+                        opponent=opponent,
+                        change_value=change_value,
+                        points_per_test=points_per_test,
+                        parallel=False,
+                        seed=run_seed,
+                        parameters=holdout_parameters,
+                    )
+                with ThreadPoolExecutor(
+                    max_workers=min(num_runs, 8)
+                ) as executor:
+                    holdout_results = list(
+                        executor.map(run_holdout, holdout_run_seeds)
+                    )
+                response = {
+                    "statistical_analysis": True,
+                    "parameters": {
+                        "points": points_per_test,
+                        "change_value": change_value,
+                        "custom": False,
+                        "used_defaults": used_defaults,
+                        "runs": num_runs,
+                        "confidence": confidence,
+                        "master_seed": master_seed,
+                    },
+                    "effect_statistics": effect_statistics,
+                    "holdout_statistics": aggregate_effect_statistics(
+                        holdout_results, "parameter_improvements", confidence
+                    ),
+                    "holdout_seeds": holdout_run_seeds,
+                    "results": all_results[0],
+                    "individual_runs": all_results,
+                    "teams": {"team": team.name, "opponent": opponent.name},
+                }
             if used_defaults and note:
                 response["note"] = note
             return jsonify(response)

@@ -6,7 +6,7 @@ Statistical analysis functions for volleyball simulation results.
 import sys
 import os
 from collections import Counter
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import copy
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
 import multiprocessing
@@ -18,43 +18,41 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from bvsim_core.team import Team
 from bvsim_core.state_machine import simulate_point
+from bvsim_core.validation import validate_team_configuration
 from .models import SimulationResults, AnalysisResults, SensitivityResults, SensitivityDataPoint
+from .match import match_impact, match_win_probability
+from .inference import wilson_interval
+
+
+def _require_valid_teams(*teams: Team) -> None:
+    for team in teams:
+        errors = validate_team_configuration(team)
+        if errors:
+            raise ValueError(
+                f"Invalid team configuration '{team.name}': " + "; ".join(errors)
+            )
 
 
 def simulate_volleyball_match(a_win_prob: float = 0.52, max_games: int = 5000, sets_to_win: int = 2,
                               points_to_win_standard: int = 21, points_to_win_last: int = 15) -> float:
-    """Monte Carlo simulate matches to estimate match win rate for a given point win probability.
-    Reduced default max_games (5000) for speed when called many times; caller can adjust upstream if needed."""
-    a_wins = b_wins = 0
-    for _ in range(max_games):
-        a_sets = b_sets = 0
-        while a_sets < sets_to_win and b_sets < sets_to_win:
-            a_points = b_points = 0
-            points_to_win = points_to_win_standard if (a_sets + b_sets) < (2 * sets_to_win - 1) else points_to_win_last
-            while True:
-                if random.random() < a_win_prob:
-                    a_points += 1
-                else:
-                    b_points += 1
-                if (a_points >= points_to_win and a_points - b_points >= 2):
-                    a_sets += 1
-                    break
-                if (b_points >= points_to_win and b_points - a_points >= 2):
-                    b_sets += 1
-                    break
-            if a_sets == sets_to_win:
-                a_wins += 1; break
-            if b_sets == sets_to_win:
-                b_wins += 1; break
-    total = a_wins + b_wins
-    return (a_wins / total) if total else 0.5
+    """Compatibility wrapper for the deterministic IID point model."""
+    if (
+        sets_to_win != 2
+        or points_to_win_standard != 21
+        or points_to_win_last != 15
+    ):
+        raise ValueError("Only standard beach-volleyball match rules are supported")
+    return match_win_probability(a_win_prob, a_win_prob)
 
 
 def point_to_match_impact(point_improvement: float, baseline_point_rate: float = 0.5) -> float:
     """Convert a point win rate improvement (percentage points) to match win rate improvement (percentage points)."""
-    baseline_match_rate = simulate_volleyball_match(baseline_point_rate)
-    improved_match_rate = simulate_volleyball_match(min(max(baseline_point_rate + point_improvement/100.0, 0.0), 1.0))
-    return (improved_match_rate - baseline_match_rate) * 100.0
+    improved = min(
+        max(baseline_point_rate + point_improvement / 100.0, 0.0), 1.0
+    )
+    return match_impact(
+        baseline_point_rate, baseline_point_rate, improved, improved
+    )
 
 
 def analyze_simulation_results(results: SimulationResults, breakdown: bool = False) -> AnalysisResults:
@@ -91,6 +89,22 @@ def analyze_simulation_results(results: SimulationResults, breakdown: bool = Fal
     # Average duration
     total_duration = sum(p.duration for p in results.points)
     average_duration = total_duration / total_points if total_points > 0 else 0
+    team_a_interval = None
+    team_b_interval = None
+    if total_points > 0:
+        _, lower, upper = wilson_interval(team_a_wins, total_points)
+        team_a_interval = {
+            "confidence": 0.95,
+            "method": "Wilson",
+            "lower": lower * 100,
+            "upper": upper * 100,
+        }
+        team_b_interval = {
+            "confidence": 0.95,
+            "method": "Wilson",
+            "lower": (1.0 - upper) * 100,
+            "upper": (1.0 - lower) * 100,
+        }
     
     # Additional breakdown data if requested
     breakdown_data = {}
@@ -137,7 +151,9 @@ def analyze_simulation_results(results: SimulationResults, breakdown: bool = Fal
         team_b_win_rate=team_b_win_rate,
         point_type_breakdown=point_type_breakdown,
         point_type_percentages=point_type_percentages,
-        average_duration=average_duration
+        average_duration=average_duration,
+        team_a_win_rate_interval=team_a_interval,
+        team_b_win_rate_interval=team_b_interval,
     )
     
     # Add breakdown data to the analysis object for access
@@ -148,8 +164,14 @@ def analyze_simulation_results(results: SimulationResults, breakdown: bool = Fal
 
 
 
-def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_per_test: int = 100000,
-                        base_serving: str = "A") -> dict:
+def delta_skill_analysis(
+    team: Team,
+    opponent: Team,
+    deltas_file: str,
+    points_per_test: int = 100000,
+    base_serving: str = "A",
+    seed: int = None,
+) -> dict:
     """
     Analyze impact of specific skill improvements defined in deltas file.
     
@@ -163,6 +185,8 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
     Returns:
         Dictionary with baseline and delta skill results
     """
+    _require_valid_teams(team, opponent)
+
     import yaml
     from pathlib import Path
     
@@ -178,11 +202,17 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
         raise ValueError(f"Empty or invalid deltas file: {deltas_file}")
     
     # Calculate baseline win rate
-    baseline_win_rate = _calculate_win_rate(team, opponent, points_per_test, base_serving)
+    effective_seed = seed if seed is not None else random.SystemRandom().getrandbits(64)
+    baseline_rates = _calculate_point_rates(
+        team, opponent, points_per_test, base_serving, effective_seed
+    )
+    baseline_win_rate = baseline_rates["overall_win_rate"]
     
     results = {
         "baseline_win_rate": baseline_win_rate,
-        "delta_improvements": {}
+        "baseline_service_win_rates": baseline_rates,
+        "delta_improvements": {},
+        "seed": effective_seed,
     }
     
     # Test each delta improvement
@@ -209,12 +239,23 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
             modified_team = Team.from_dict(modified_team_data)
             
             # Calculate win rate with delta improvement
-            delta_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+            delta_rates = _calculate_point_rates(
+                modified_team, opponent, points_per_test, base_serving,
+                effective_seed
+            )
+            delta_win_rate = delta_rates["overall_win_rate"]
             improvement = delta_win_rate - baseline_win_rate
             
             results["delta_improvements"][parameter] = {
                 "win_rate": delta_win_rate,
                 "improvement": improvement,
+                "service_win_rates": delta_rates,
+                "match_improvement": match_impact(
+                    baseline_rates["a_serves_win_probability"],
+                    baseline_rates["b_serves_win_probability"],
+                    delta_rates["a_serves_win_probability"],
+                    delta_rates["b_serves_win_probability"],
+                ),
                 "current_value": current_value,
                 "delta_value": delta_value,
                 "new_value": new_value
@@ -231,8 +272,15 @@ def delta_skill_analysis(team: Team, opponent: Team, deltas_file: str, points_pe
 
 
 
-def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_files: list, points_per_test: int = 100000,
-                              base_serving: str = "A", parallel: bool = True) -> dict:
+def multi_team_skill_analysis(
+    base_team: Team,
+    opponent: Team,
+    team_variant_files: list,
+    points_per_test: int = 100000,
+    base_serving: str = "A",
+    parallel: bool = True,
+    seed: int = None,
+) -> dict:
     """Analyze impact of multiple full team variant YAML files.
 
     Each provided YAML file is treated as a (possibly partial) team definition per Team.from_yaml_file.
@@ -247,12 +295,23 @@ def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_file
         }
     }
     """
+    _require_valid_teams(base_team, opponent)
+
     from pathlib import Path
     import sys
     import yaml
 
-    baseline_win_rate = _calculate_win_rate(base_team, opponent, points_per_test, base_serving)
-    results = {"baseline_win_rate": baseline_win_rate, "file_results": {}}
+    effective_seed = seed if seed is not None else random.SystemRandom().getrandbits(64)
+    baseline_rates = _calculate_point_rates(
+        base_team, opponent, points_per_test, base_serving, effective_seed
+    )
+    baseline_win_rate = baseline_rates["overall_win_rate"]
+    results = {
+        "baseline_win_rate": baseline_win_rate,
+        "baseline_service_win_rates": baseline_rates,
+        "file_results": {},
+        "seed": effective_seed,
+    }
 
     # NOTE: Nested function removed for multiprocessing pickling. See _test_single_team_variant_file.
 
@@ -260,7 +319,10 @@ def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_file
     if parallel and len(team_variant_files) > 1 and points_per_test >= 50000:
         opponent_dict = opponent.to_dict()
         file_args = [
-        (team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate)
+        (
+            team_file, opponent_dict, points_per_test, base_serving,
+            baseline_win_rate, baseline_rates, effective_seed
+        )
             for team_file in team_variant_files
         ]
         max_workers = min(multiprocessing.cpu_count(), len(team_variant_files), 8)
@@ -289,7 +351,12 @@ def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_file
     if not parallel or len(team_variant_files) <= 1 or points_per_test < 50000:
         opponent_dict = opponent.to_dict()
         for team_file in team_variant_files:
-            team_file, result, error = _test_single_team_variant_file((team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate))
+            team_file, result, error = _test_single_team_variant_file(
+                (
+                    team_file, opponent_dict, points_per_test, base_serving,
+                    baseline_win_rate, baseline_rates, effective_seed
+                )
+            )
             if error:
                 print(f"Warning: {error}")
             elif result is not None:
@@ -300,7 +367,10 @@ def multi_team_skill_analysis(base_team: Team, opponent: Team, team_variant_file
 
 def _test_single_team_variant_file(args_tuple):
     """Top-level helper for testing a single team variant file (for multiprocessing)."""
-    (team_file, opponent_dict, points_per_test, base_serving, baseline_win_rate) = args_tuple
+    (
+        team_file, opponent_dict, points_per_test, base_serving,
+        baseline_win_rate, baseline_rates, seed
+    ) = args_tuple
     from pathlib import Path
     import yaml
     try:
@@ -311,11 +381,22 @@ def _test_single_team_variant_file(args_tuple):
             data = yaml.safe_load(f) or {}
         variant_team = Team.from_dict(data)
         opponent_team = Team.from_dict(opponent_dict)
-        win_rate = _calculate_win_rate(variant_team, opponent_team, points_per_test, base_serving)
+        _require_valid_teams(variant_team, opponent_team)
+        point_rates = _calculate_point_rates(
+            variant_team, opponent_team, points_per_test, base_serving, seed
+        )
+        win_rate = point_rates["overall_win_rate"]
         improvement = win_rate - baseline_win_rate
         return team_file, {
             "win_rate": win_rate,
             "improvement": improvement,
+            "service_win_rates": point_rates,
+            "match_improvement": match_impact(
+                baseline_rates["a_serves_win_probability"],
+                baseline_rates["b_serves_win_probability"],
+                point_rates["a_serves_win_probability"],
+                point_rates["b_serves_win_probability"],
+            ),
             "file_path": team_file,
             "deltas_count": 0
         }, None
@@ -326,7 +407,8 @@ def _test_single_team_variant_file(args_tuple):
 def _test_single_parameter(args_tuple):
     """Helper function to test a single parameter - designed for parallel execution"""
     (parameter, current_value, team_dict, opponent_dict, change_value, 
-     points_per_test, base_serving, baseline_win_rate) = args_tuple
+     points_per_test, base_serving, baseline_win_rate, baseline_rates,
+     seed) = args_tuple
     
     try:
         # Recreate team objects from dictionaries (needed for multiprocessing)
@@ -348,32 +430,27 @@ def _test_single_parameter(args_tuple):
         modified_team = Team.from_dict(modified_team_data)
         
         # Calculate win rate with parameter improvement
-        new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+        point_rates = _calculate_point_rates(
+            modified_team, opponent, points_per_test, base_serving, seed
+        )
+        new_win_rate = point_rates["overall_win_rate"]
         improvement = new_win_rate - baseline_win_rate
-        # Approximate 95% CI for improvement using binomial variance of two proportions
-        # Convert percent -> proportion
-        p1 = baseline_win_rate / 100.0
-        p2 = new_win_rate / 100.0
-        n = points_per_test
-        # Standard error of difference in proportions
-        se = math.sqrt(max(p1*(1-p1)/n,0) + max(p2*(1-p2)/n,0)) * 100.0  # back to percentage scale
-        z = 1.96
-        lower = improvement - z*se
-        upper = improvement + z*se
-        # Match win rate impact approximation (reuse logic from CLI: simulate matches)
-        match_mean = point_to_match_impact(improvement, baseline_point_rate=p1)
-        # Approximate match CI: propagate point improvement CI endpoints
-        match_lower = point_to_match_impact(lower, baseline_point_rate=p1)
-        match_upper = point_to_match_impact(upper, baseline_point_rate=p1)
+        match_mean = match_impact(
+            baseline_rates["a_serves_win_probability"],
+            baseline_rates["b_serves_win_probability"],
+            point_rates["a_serves_win_probability"],
+            point_rates["b_serves_win_probability"],
+        )
         return parameter, {
             "win_rate": new_win_rate,
             "improvement": improvement,
-            "improvement_lower": lower,
-            "improvement_upper": upper,
-            "improvement_se": se,
+            "service_win_rates": point_rates,
+            "improvement_lower": None,
+            "improvement_upper": None,
+            "improvement_se": None,
             "match_improvement": match_mean,
-            "match_lower": match_lower,
-            "match_upper": match_upper,
+            "match_lower": None,
+            "match_upper": None,
             "current_value": current_value,
             "change_value": change_value,
             "new_value": new_value
@@ -384,8 +461,16 @@ def _test_single_parameter(args_tuple):
         return parameter, None
 
 
-def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_per_test: int = 100000,
-                       base_serving: str = "A", parallel: bool = True) -> dict:
+def full_skill_analysis(
+    team: Team,
+    opponent: Team,
+    change_value: float,
+    points_per_test: int = 100000,
+    base_serving: str = "A",
+    parallel: bool = True,
+    seed: int = None,
+    parameters: Optional[List[str]] = None,
+) -> dict:
     """
     Analyze impact of changing every probability parameter by a fixed amount.
     
@@ -396,12 +481,19 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
         points_per_test: Number of points to simulate per test (default: 100000)
         base_serving: Which team serves ("A" or "B")
         parallel: Use parallel processing for parameter testing (default: True)
+        parameters: Optional subset of parameter paths to test
         
     Returns:
         Dictionary with baseline and all parameter results
     """
+    _require_valid_teams(team, opponent)
+
     # Calculate baseline win rate
-    baseline_win_rate = _calculate_win_rate(team, opponent, points_per_test, base_serving)
+    effective_seed = seed if seed is not None else random.SystemRandom().getrandbits(64)
+    baseline_rates = _calculate_point_rates(
+        team, opponent, points_per_test, base_serving, effective_seed
+    )
+    baseline_win_rate = baseline_rates["overall_win_rate"]
     
     # Get all numeric probability parameters
     team_dict = team.to_dict()
@@ -419,12 +511,25 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
         return params
     
     all_params = extract_probability_params(team_dict)
+    if parameters is not None:
+        unknown = set(parameters) - set(all_params)
+        if unknown:
+            raise ValueError(
+                "unknown skill parameters: " + ", ".join(sorted(unknown))
+            )
+        selected = set(parameters)
+        all_params = {
+            name: value for name, value in all_params.items()
+            if name in selected
+        }
     
     results = {
         "baseline_win_rate": baseline_win_rate,
+        "baseline_service_win_rates": baseline_rates,
         "change_value": change_value,
         "parameter_improvements": {},
-        "total_parameters": len(all_params)
+        "total_parameters": len(all_params),
+        "seed": effective_seed,
     }
     
     # Only use parallel processing for larger workloads where the overhead is worth it
@@ -433,7 +538,8 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
         # Prepare arguments for parallel execution
         param_args = [
             (parameter, current_value, team_dict, opponent_dict, change_value,
-             points_per_test, base_serving, baseline_win_rate)
+             points_per_test, base_serving, baseline_win_rate, baseline_rates,
+             effective_seed)
             for parameter, current_value in all_params.items()
         ]
         
@@ -495,27 +601,28 @@ def full_skill_analysis(team: Team, opponent: Team, change_value: float, points_
                 modified_team = Team.from_dict(modified_team_data)
                 
                 # Calculate win rate with parameter improvement
-                new_win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+                point_rates = _calculate_point_rates(
+                    modified_team, opponent, points_per_test, base_serving,
+                    effective_seed
+                )
+                new_win_rate = point_rates["overall_win_rate"]
                 improvement = new_win_rate - baseline_win_rate
-                # Approximate 95% CI
-                p1 = baseline_win_rate / 100.0
-                p2 = new_win_rate / 100.0
-                se = math.sqrt(max(p1*(1-p1)/points_per_test,0) + max(p2*(1-p2)/points_per_test,0)) * 100.0
-                z = 1.96
-                lower = improvement - z*se
-                upper = improvement + z*se
-                match_mean = point_to_match_impact(improvement, baseline_point_rate=p1)
-                match_lower = point_to_match_impact(lower, baseline_point_rate=p1)
-                match_upper = point_to_match_impact(upper, baseline_point_rate=p1)
+                match_mean = match_impact(
+                    baseline_rates["a_serves_win_probability"],
+                    baseline_rates["b_serves_win_probability"],
+                    point_rates["a_serves_win_probability"],
+                    point_rates["b_serves_win_probability"],
+                )
                 results["parameter_improvements"][parameter] = {
                     "win_rate": new_win_rate,
                     "improvement": improvement,
-                    "improvement_lower": lower,
-                    "improvement_upper": upper,
-                    "improvement_se": se,
+                    "service_win_rates": point_rates,
+                    "improvement_lower": None,
+                    "improvement_upper": None,
+                    "improvement_se": None,
                     "match_improvement": match_mean,
-                    "match_lower": match_lower,
-                    "match_upper": match_upper,
+                    "match_lower": None,
+                    "match_upper": None,
                     "current_value": current_value,
                     "change_value": change_value,
                     "new_value": new_value
@@ -558,7 +665,7 @@ def set_nested_value(data: dict, path: str, value: Any) -> dict:
 
 def sensitivity_analysis(team: Team, opponent: Team, parameter: str, 
                         param_range: str, points_per_test: int = 1000,
-                        base_serving: str = "A") -> SensitivityResults:
+                        base_serving: str = "A", seed: int = None) -> SensitivityResults:
     """
     Perform sensitivity analysis on a team parameter.
     
@@ -573,11 +680,19 @@ def sensitivity_analysis(team: Team, opponent: Team, parameter: str,
     Returns:
         Sensitivity analysis results
     """
+    _require_valid_teams(team, opponent)
+
     # Parse range
     try:
         min_val, max_val, step = map(float, param_range.split(','))
     except ValueError:
         raise ValueError(f"Invalid range format: {param_range}. Expected 'min,max,step'")
+    if step <= 0:
+        raise ValueError("range step must be positive")
+    if min_val > max_val:
+        raise ValueError("range minimum must not exceed maximum")
+    if min_val < 0.0 or max_val > 1.0:
+        raise ValueError("probability range values must be between 0 and 1")
     
     # Get base value and validate parameter exists
     try:
@@ -589,7 +704,11 @@ def sensitivity_analysis(team: Team, opponent: Team, parameter: str,
         raise ValueError(f"Parameter '{parameter}' must be numeric, got {type(base_value)}")
     
     # Calculate base win rate
-    base_win_rate = _calculate_win_rate(team, opponent, points_per_test, base_serving)
+    effective_seed = seed if seed is not None else random.SystemRandom().getrandbits(64)
+    base_rates = _calculate_point_rates(
+        team, opponent, points_per_test, base_serving, effective_seed
+    )
+    base_win_rate = base_rates["overall_win_rate"]
     
     # Generate parameter values to test
     param_values = []
@@ -614,13 +733,23 @@ def sensitivity_analysis(team: Team, opponent: Team, parameter: str,
         modified_team = Team.from_dict(modified_team_data)
         
         # Calculate win rate
-        win_rate = _calculate_win_rate(modified_team, opponent, points_per_test, base_serving)
+        point_rates = _calculate_point_rates(
+            modified_team, opponent, points_per_test, base_serving, effective_seed
+        )
+        win_rate = point_rates["overall_win_rate"]
         change_from_base = win_rate - base_win_rate
+        match_change = match_impact(
+            base_rates["a_serves_win_probability"],
+            base_rates["b_serves_win_probability"],
+            point_rates["a_serves_win_probability"],
+            point_rates["b_serves_win_probability"],
+        )
         
         data_points.append(SensitivityDataPoint(
             parameter_value=param_value,
             win_rate=win_rate,
-            change_from_base=change_from_base
+            change_from_base=change_from_base,
+            match_change_from_base=match_change,
         ))
     
     # Calculate impact factor
@@ -638,22 +767,69 @@ def sensitivity_analysis(team: Team, opponent: Team, parameter: str,
         parameter_name=parameter,
         base_win_rate=base_win_rate,
         data_points=data_points,
-        impact_factor=impact_factor
+        impact_factor=impact_factor,
+        base_service_win_rates=base_rates,
     )
 
 
-def _calculate_win_rate(team_a: Team, team_b: Team, num_points: int, base_serving: str) -> float:
+def _calculate_win_rate(
+    team_a: Team,
+    team_b: Team,
+    num_points: int,
+    base_serving: str,
+    seed: int = None,
+) -> float:
     """Calculate win rate for team A over specified number of points"""
+    return _calculate_point_rates(
+        team_a, team_b, num_points, base_serving, seed
+    )["overall_win_rate"]
+
+
+def _calculate_point_rates(
+    team_a: Team,
+    team_b: Team,
+    num_points: int,
+    base_serving: str,
+    seed: int = None,
+) -> Dict[str, float]:
+    """Calculate overall and service-conditional Team A point-win rates."""
+    if num_points <= 0:
+        raise ValueError("num_points must be positive")
+    if base_serving not in {"A", "B"}:
+        raise ValueError("base_serving must be A or B")
+
     wins = 0
-    
+    serve_wins = {"A": 0, "B": 0}
+    serve_totals = {"A": 0, "B": 0}
+    seed_stream = random.Random(seed)
     for i in range(num_points):
         # Alternate serving
         serving_team = base_serving if i % 2 == 0 else ("B" if base_serving == "A" else "A")
-        point = simulate_point(team_a, team_b, serving_team=serving_team, seed=None)
+        point = simulate_point(
+            team_a,
+            team_b,
+            serving_team=serving_team,
+            seed=seed_stream.getrandbits(64),
+        )
         if point.winner == "A":
             wins += 1
-    
-    return (wins / num_points) * 100 if num_points > 0 else 0
+            serve_wins[serving_team] += 1
+        serve_totals[serving_team] += 1
+
+    overall = wins / num_points
+    return {
+        "overall_win_rate": overall * 100.0,
+        "a_serves_win_probability": (
+            serve_wins["A"] / serve_totals["A"]
+            if serve_totals["A"]
+            else overall
+        ),
+        "b_serves_win_probability": (
+            serve_wins["B"] / serve_totals["B"]
+            if serve_totals["B"]
+            else overall
+        ),
+    }
 
 
 def _adjust_probability_distribution(team_data: dict, parameter: str, new_value: float) -> dict:
@@ -675,6 +851,13 @@ def _adjust_probability_distribution(team_data: dict, parameter: str, new_value:
             set_nested_value(team_data, parameter, new_value)
             return team_data
         
+        if not isinstance(new_value, (int, float)) or not math.isfinite(new_value):
+            raise ValueError(f"Probability '{parameter}' must be a finite number")
+        if not 0.0 <= new_value <= 1.0:
+            raise ValueError(
+                f"Probability '{parameter}' must be between 0.0 and 1.0, got {new_value}"
+            )
+
         # Get current values
         old_value = parent_dist.get(target_key, 0)
         
@@ -689,7 +872,10 @@ def _adjust_probability_distribution(team_data: dict, parameter: str, new_value:
         other_keys = [k for k in parent_dist.keys() if k != target_key]
         
         if not other_keys:
-            # Only one key, just set it
+            if not math.isclose(new_value, 1.0, abs_tol=0.001):
+                raise ValueError(
+                    f"Single-outcome distribution '{parent_path}' must have probability 1.0"
+                )
             set_nested_value(team_data, parameter, new_value)
             return team_data
         
@@ -697,15 +883,18 @@ def _adjust_probability_distribution(team_data: dict, parameter: str, new_value:
         other_sum = sum(parent_dist[k] for k in other_keys)
         
         if other_sum <= 0:
-            # Can't adjust other values, just set the target
+            if not math.isclose(new_value, 1.0, abs_tol=0.001):
+                raise ValueError(
+                    f"Cannot redistribute probability in '{parent_path}': "
+                    "all non-target outcomes have zero mass"
+                )
+            for key in other_keys:
+                set_nested_value(team_data, f"{parent_path}.{key}", 0.0)
             set_nested_value(team_data, parameter, new_value)
             return team_data
         
         # Proportionally adjust other values
         remaining_probability = 1.0 - new_value
-        
-        if remaining_probability < 0:
-            remaining_probability = 0
         
         # Scale other values proportionally
         for key in other_keys:
@@ -715,6 +904,12 @@ def _adjust_probability_distribution(team_data: dict, parameter: str, new_value:
         
         # Set the target value
         set_nested_value(team_data, parameter, new_value)
+
+        adjusted_sum = sum(parent_dist.values())
+        if not math.isclose(adjusted_sum, 1.0, abs_tol=1e-9):
+            raise ValueError(
+                f"Adjusted distribution '{parent_path}' sums to {adjusted_sum}, expected 1.0"
+            )
         
         return team_data
         

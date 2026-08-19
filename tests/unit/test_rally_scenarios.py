@@ -311,6 +311,84 @@ class TestRallyScenarios(unittest.TestCase):
                 self.assertEqual(point.states[5].team, expected_dig_team, 
                     f"Seed {seed}: Block quality '{block_quality}' should result in team {expected_dig_team} digging, but team {point.states[5].team} dug")
 
+    def test_extended_rally_uses_attacking_team_dig_probabilities(self):
+        """A deflection back to the attacker must use the attacker's dig model."""
+        team_a_data = self.defended_team_data.copy()
+        team_a_data["name"] = "Reliable Dig Team"
+        team_a_data["dig_probabilities"] = {
+            "deflected_attack": {
+                "excellent": 1.0, "good": 0.0, "poor": 0.0, "error": 0.0
+            }
+        }
+        team_a_data["block_probabilities"] = {
+            "power_attack": {
+                "stuff": 0.0,
+                "deflection_to_attack": 0.0,
+                "deflection_to_defense": 0.0,
+                "no_touch": 1.0,
+            }
+        }
+
+        team_b_data = self.defended_team_data.copy()
+        team_b_data["name"] = "Error Dig Team"
+        team_b_data["dig_probabilities"] = {
+            "deflected_attack": {
+                "excellent": 0.0, "good": 0.0, "poor": 0.0, "error": 1.0
+            }
+        }
+        team_b_data["block_probabilities"] = {
+            "power_attack": {
+                "stuff": 0.0,
+                "deflection_to_attack": 1.0,
+                "deflection_to_defense": 0.0,
+                "no_touch": 0.0,
+            }
+        }
+
+        point = simulate_point(
+            Team.from_dict(team_a_data),
+            Team.from_dict(team_b_data),
+            serving_team="A",
+            seed=0,
+        )
+
+        extended_digs = [
+            state for state in point.states[6:]
+            if state.team == "A" and state.action == "dig"
+        ]
+        self.assertTrue(extended_digs)
+        self.assertTrue(all(state.quality == "excellent" for state in extended_digs))
+
+    def test_deflection_counterattack_returns_possession_to_original_attacker(self):
+        """A defended counterattack returns possession to its defender."""
+        team_data = self.defended_team_data.copy()
+        team_data["block_probabilities"] = {
+            "power_attack": {
+                "stuff": 0.0,
+                "deflection_to_attack": 0.0,
+                "deflection_to_defense": 1.0,
+                "no_touch": 0.0,
+            }
+        }
+        team_a = Team.from_dict({**team_data, "name": "Team A"})
+        team_b = Team.from_dict({**team_data, "name": "Team B"})
+
+        point = simulate_point(team_a, team_b, serving_team="A", seed=0)
+        actions = [(state.team, state.action) for state in point.states]
+
+        first_extended_block = actions.index(("A", "block"), 5)
+        counterattack = actions[first_extended_block:first_extended_block + 5]
+        self.assertEqual(
+            counterattack,
+            [
+                ("A", "block"),
+                ("A", "set"),
+                ("A", "attack"),
+                ("B", "set"),
+                ("B", "attack"),
+            ],
+        )
+
 
 if __name__ == '__main__':
     unittest.main()

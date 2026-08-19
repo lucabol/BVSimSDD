@@ -4,7 +4,7 @@
 
 BVSim helps coaches and analysts understand team performance by simulating realistic volleyball points based on team-specific skill probabilities. The simulator accounts for conditional probabilities where success rates depend on previous actions (e.g., attack success varies based on set quality).
 
-Prefer the graphical interface? See the [BVSim Web User Guide](README_WEB.md) for a pane-by-pane walkthrough and explanations of every generated statistic.
+Prefer the graphical interface? See the [BVSim Web User Guide](README_WEB.md) for a pane-by-pane walkthrough and explanations of every generated statistic. To host the web interface, see the [Deployment Guide](DEPLOYMENT.md).
 
 ## Features
 

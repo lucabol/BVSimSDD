@@ -148,8 +148,6 @@ def test_skills_explicit_multi_run_includes_holdout(client):
         row['adjusted_p_value'] is not None
         for row in data['effect_statistics']
     )
-
-
 def test_scenarios_default_to_one_interactive_run(client):
     rv = client.post(
         '/api/skills',

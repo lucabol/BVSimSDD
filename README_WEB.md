@@ -1,144 +1,271 @@
-# BVSim Web Interface (MVP)
+# BVSim Web User Guide
 
-A minimal Flask-based web UI exposing the core BVSim simulator features without modifying existing library code.
+BVSim simulates beach volleyball points from team skill probabilities. Use the web interface to compare teams, test hypothetical improvements, inspect rally sequences, and understand how points are won and lost.
 
-## Quick Start (Scripts)
+BVSim results are estimates from simulated points. They describe what the configured probability model produces; they are not guarantees about a real match.
 
-After installing dependencies (see Running section), you can launch the web UI with provided helper scripts:
+## Start the Web Interface
 
-### Bash (Linux/macOS)
-```bash
-./run_web.sh                # default host 0.0.0.0, port 8000, debug on
-./run_web.sh 5000           # override port
-./run_web.sh 5000 127.0.0.1 # custom port + host
-BVSIM_WEB_PORT=9000 BVSIM_WEB_DEBUG=false ./run_web.sh
-```
-
-### Windows (CMD)
-```bat
-run_web.bat                 REM default 0.0.0.0:8000
-run_web.bat 5000            REM custom port
-run_web.bat 5000 127.0.0.1  REM custom port + host
-set BVSIM_WEB_PORT=9000 & set BVSIM_WEB_DEBUG=false & run_web.bat
-```
-
-### Environment Variables
-| Variable | Default | Description |
-|----------|---------|-------------|
-| BVSIM_WEB_HOST | 0.0.0.0 | Interface to bind the server |
-| BVSIM_WEB_PORT | 8000 | Listening port |
-| BVSIM_WEB_DEBUG | true | Flask debug / reload mode |
-| BVSIM_WEB_WORKERS | (unset) | If set and gunicorn installed, use that many workers (Unix) |
-
-The Python entrypoint (`python -m bvsim_web`) now respects these environment variables.
-
-## Features
-- List / create / upload team YAML files (stored in working directory)
-- Run simulations with quick / standard / accurate presets (10k / 200k / 400k points)
-- Perform skills analysis (full skill impact or custom scenario files) with graphical impact chart
-- Compare multiple teams
-- Generate rally examples
-	- Visual timeline view of rally sequences with action qualities & winner highlighting
-- Download existing team YAML files
-- Collapsible raw JSON output panel (minimized by default) to keep UI clean
-- Supports **minimal-diff team files**: uploaded / created team YAMLs may omit unchanged top-level probability sections; omitted sections auto-fill from the Basic template.
-
-## Architecture
-Package `bvsim_web` (separate from core) provides:
-- `create_app()` factory returning a Flask app with JSON API + static UI
-- Direct use of internal Python modules (no subprocess CLI calls)
-- Synchronous request handling for simplicity (long operations block until done)
-
-## Endpoints & Point Defaults
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /api/version | Library version |
-| GET | /api/teams | List discovered team YAML files |
-| POST | /api/teams {name, template} | Create new team (basic/advanced) |
-| POST | /api/teams/upload (multipart) | Upload an existing team YAML |
-| GET | /api/teams/<name>/download | Download team YAML |
-| POST | /api/simulate | Run a simulation (Quick=10k, Standard=200k default, Accurate=400k) |
-| POST | /api/skills | Skills analysis (Quick=10k, Standard=200k default, Accurate=400k) |
-| POST | /api/compare | Compare teams (Quick=10k, Standard=200k default, Accurate=400k) |
-| POST | /api/examples | Rally examples (team_a, team_b, count, seed?) |
-| POST | /api/analyze | Analyze existing simulation results file {file, breakdown?} |
-
-## Running
-Install Flask (not added to core requirements to avoid altering existing setup):
+Install the application dependencies, then start the server:
 
 ```bash
+pip install -e .
 pip install Flask
-python -m bvsim_web  # runs on http://localhost:8000
+python -m bvsim_web
 ```
 
-Or create an app programmatically:
-```python
-from bvsim_web import create_app
-app = create_app()
-app.run()
+Open [http://localhost:8000](http://localhost:8000).
+
+You can also use the launch scripts:
+
+```bash
+# Linux or macOS
+./run_web.sh
+
+# Windows Command Prompt
+run_web.bat
 ```
 
-## Frontend
-Served at `/` (static). Uses fetch + simple DOM updates. All responses are JSON.
+## A Good First Run
 
-### Visualization Pane
-Running a Skills Analysis now renders a bar/line composite chart (Chart.js) showing:
-- Baseline win rate (line)
-- New win rate per parameter improvement (bars, top 25 by absolute improvement)
-- Delta improvement line (right axis, point win rate delta in percentage points)
+1. In **Simulate**, select a team for Team A and Team B.
+2. Click **Quick** to simulate 10,000 points.
+3. Read the win percentages in the Output pane.
+4. Review the tables below the chart to see how the points ended.
+5. Use **Skills** to test which individual probability improvements have the greatest estimated effect.
 
-Hover tooltips provide exact values. The underlying full JSON remains available in the Output panel.
+## Understanding Teams
 
-### Collapsible Output Panel
-The Output (raw JSON / logs) section is minimized by default to reduce scrolling. Click the Output header badge (Show / Hide) to toggle visibility. Programmatic writes do not auto-expand it— preserving user choice during iterative debugging.
+A team is a set of probabilities stored in YAML. Probabilities are decimals from `0` to `1`:
 
-### Rally Timeline Visualization (NEW)
-Using the Rallies panel (Generate button) now produces a graphical timeline: each action (Serve, Receive, Set, Attack, etc.) is a colored card ordered left-to-right with arrows. Card border/background color indicates the acting team (Team A blue, Team B red). A quality pill (excellent, good, ok, error, ace) is color-coded (green, blue, gray, red, purple). The result (point_type) appears as a labeled box at the end. Hovering over any step shows the raw token. The full original sequence string remains in the footer and the full JSON is still visible in the JSON Output panel.
+- `0.05` means 5%.
+- `0.50` means 50%.
+- `1.00` means 100%.
 
-Parsing rules: sequence tokens like `A.att(err)` become {team:A, action:Attack, quality:error}. Quality synonyms are normalized (exc/excellent → excellent, gd/good → good, err/error → error). Unknown or unmatched tokens are ignored (kept in raw text).
+Each group of possible outcomes must add up to `1.00`. Many probabilities are conditional. For example, attack probabilities after an excellent set can differ from attack probabilities after a poor set.
 
-Limitations: currently supports single-letter team codes (A/B) or names beginning with those letters. Extend `parseRallySequence` in `static/app.js` to support more complex naming if needed.
+### Teams Pane
 
-## Notes & Limitations
-- Long-running analyses block request (consider async/job queue for large workloads later)
-- No authentication (intended for local usage / trusted environment)
-- Skills endpoint currently single-run (statistical multi-run can be layered later)
-- Team editing is not in-browser; edit YAML files directly
+Use the **Teams** pane to:
 
-### Point Count Logic
-For simulate, skills, and compare endpoints:
-- Quick: 10,000 points
-- Accurate: 400,000 points
-- Standard (no flag, no explicit points): 200,000 points
-Providing an explicit `points` overrides all presets.
+- Create a team from the Basic or Advanced template.
+- Upload an existing `.yaml` or `.yml` team file.
+- Edit, save, download, or delete a listed team.
 
-### Default Team Selection Rules (Updated)
-- Simulate / Skills / Examples: If a team field is left blank, that side becomes a Basic template (Team A or Team B label). If both are blank, it runs Basic vs Basic.
-- Compare: If no teams are supplied, comparison runs Basic (Team A) vs Basic (Team B). A single provided team will be compared against a Basic template opponent (Team B).
+The editor validates probability ranges and totals when you save. A team file may omit an entire top-level probability section; BVSim fills that section from the Basic template. If you include a section, its included probability distributions must be complete and total `1.00`.
 
-## Future Enhancements
-1. Async job queue with progress polling
-2. WebSocket/live updates for long simulations
-3. Inline probability editor UI
-4. Additional chart visualizations (win rate matrices, multi-run confidence intervals)
-5. Authentication & role-based access
-6. Multi-run statistical skills endpoint parity with CLI
-7. Dockerfile for easy deployment
+## Simulation Size: Run, Quick, and Accurate
 
----
-This MVP keeps footprint small while exposing core simulator capabilities.
+| Action | Simulated points | When to use it |
+|---|---:|---|
+| **Quick** | 10,000 | Fast exploration and checking whether an idea is promising |
+| **Run / Analyze** | 200,000 by default | Normal analysis |
+| **Accurate** | 400,000 | A more stable estimate when differences are small |
 
-### Added: JSON Syntax Highlighting
-The JSON Output panel now uses a lightweight custom tokenizer (no external JS dependency) for syntax coloring (keys, strings, numbers, booleans, null). This avoids layout glitches previously seen with the CDN highlight library. To adjust colors, edit the `.j-key`, `.j-string`, `.j-number`, `.j-bool`, and `.j-null` CSS rules in `index.html`.
+In the Simulate pane, entering **Points** and clicking **Run** uses that custom number. Quick and Accurate use their preset sizes.
 
-### Added: YAML Team Editor Highlighting (NEW)
-The Team editing modal now features YAML syntax highlighting, line numbers, and basic editing keybindings powered by a lightweight CodeMirror 6 setup (loaded via CDN). The original `<textarea>` remains in the DOM (hidden) for graceful degradation; if scripts fail to load, plain text editing still works.
+More simulated points reduce random sampling noise. They do not make an unrealistic team model more realistic.
 
-Implementation details:
-- Module imports for `@codemirror/state`, `@codemirror/view`, `@codemirror/lang-yaml`, and `@codemirror/commands` included inline in `static/index.html`.
-- Editor initialized lazily after DOMContentLoaded; content syncs on load, save, and format actions.
-- Save action always pulls current document text from the editor instance before sending to the `/api/teams/<file>` endpoint.
-- Formatting currently trims trailing whitespace only (future enhancement: integrate js-yaml for structural formatting).
+## Simulate Pane
 
-To adjust appearance: edit the `.cm-editor`, `.cm-gutters`, or line number color rules in `index.html`.
+Select Team A and Team B, then run a point simulation. Serving alternates between the teams so that each receives approximately the same number of serves.
 
+### Main Results
+
+| Result | Meaning |
+|---|---|
+| **Wins** | Number of simulated points won by the team |
+| **Win %** | Team wins divided by all simulated points |
+| **Total points** | Number of independent points simulated |
+| **Average duration** | Average number of volleyball actions or states in a point, not elapsed time |
+
+Example: if Team A wins 54,200 of 100,000 points, its point win rate is `54.20%`. This means the model gave Team A a 54.20% chance of winning an individual point under the simulated conditions.
+
+The two team win rates should add up to 100%.
+
+### Point Type Distribution
+
+This table explains how all simulated points ended.
+
+| Column | Meaning |
+|---|---|
+| **Point Type** | Final event that decided the point |
+| **Count** | Number of points ending that way |
+| **% of Points** | Count divided by all simulated points |
+
+Common point types are:
+
+| Point type | Meaning |
+|---|---|
+| `ace` | The serve directly won the point |
+| `serve_error` | The server made an error |
+| `receive_error` | Reception failed |
+| `set_error` | Setting failed |
+| `kill` | An attack directly won the point |
+| `attack_error` | The attacker made an error |
+| `stuff` | A block directly won the point |
+| `dig_error` | Defense failed to control an attack |
+| `rally` | Generic rally result when no more specific ending is available |
+
+### Point Type Wins by Team
+
+This table looks only at the points won by each team.
+
+For example, if Team A has 20,000 wins and 8,000 are labeled `kill`, the Team A `%Wins` value for `kill` is 40%. It means 40% of Team A's winning points ended in a kill. It does **not** mean Team A kills 40% of every attack or every simulated point.
+
+### Serving Performance
+
+| Result | Meaning |
+|---|---|
+| **Serve Win %** | Percentage of points the team won when it started as the serving team |
+| **Serves Count** | Number of simulated points for which the team served |
+| **Serves Share** | Team's share of all simulated serves |
+
+Serve Win % includes every way the serving team can eventually win the point; it is not the ace percentage.
+
+### Duration by Point Type
+
+Duration is measured in simulated actions or states.
+
+- **Avg Dur** is the average number of actions for points of that type.
+- **Min** and **Max** are the shortest and longest observed points of that type.
+- **% of Points** is the share of all simulated points ending with that type.
+
+## Skills Pane
+
+Use **Skills** to answer: "If this team improved one probability at a time, which improvement would matter most against this opponent?"
+
+1. Select the team to improve.
+2. Select its opponent.
+3. Enter an **Improve** value, such as `5%` or `0.05`.
+4. Click Analyze, Quick, or Accurate.
+
+The improvement is additive. If a probability is `0.10` and Improve is `5%`, BVSim tests `0.15`, not `0.105`. Other outcomes in the same distribution are adjusted so that the distribution remains valid.
+
+Each row tests one parameter independently. BVSim does not apply all listed improvements to the team at the same time.
+
+### Skills Results
+
+| Result | Meaning |
+|---|---|
+| **Baseline win rate** | Point win percentage before changing the tested probability |
+| **Point Impact mean** | Estimated change in point win rate, in percentage points |
+| **Match Impact mean** | Estimated change in best-of-three match win probability, in percentage points |
+| **Lower / Upper** | Approximate confidence interval around the estimated impact |
+| **Significant** | Whether the displayed interval stays entirely above or below zero |
+
+Percentage-point changes are not relative percentages. Moving from 50% to 53% is a **+3 percentage-point** impact, or a 6% relative increase.
+
+Example:
+
+```text
+Match Impact mean: +4.20%
+95% CI: [+2.10%, +6.30%]
+Significant: Yes
+```
+
+This means the tested skill change is estimated to increase match win probability by 4.20 percentage points. The interval does not include zero, so the simulation provides evidence that the effect is positive under this model.
+
+If an interval includes zero, such as `[-0.80%, +1.40%]`, the simulation did not clearly distinguish the change from sampling variation. It does not prove that the skill has no effect.
+
+### Skills Chart Colors
+
+- Dark blue: significant positive estimate.
+- Dark red: significant negative estimate.
+- Light blue: positive estimate whose interval includes zero.
+- Light red: negative estimate whose interval includes zero.
+- The horizontal line shows the interval.
+- The vertical zero line separates estimated improvements from estimated regressions.
+
+The match impact is a derived estimate that translates point-win changes into match-win changes using simulated best-of-three matches. Treat it as a planning aid rather than an exact forecast.
+
+## Scenarios Pane
+
+Use **Scenarios** to compare complete team variants instead of changing one probability at a time.
+
+1. Select a baseline team.
+2. Select one or more scenario YAML files. Hold Ctrl on Windows/Linux or Command on macOS to select multiple files.
+3. Run the analysis.
+
+The selected baseline team plays against itself to establish the baseline. Each scenario file then replaces one side with the variant, allowing you to compare the variant with the unchanged baseline.
+
+By default, each scenario is evaluated across five runs. The displayed values mean:
+
+- **Baseline mean**: average baseline point win rate across runs.
+- **Baseline lower/upper**: interval around that baseline estimate.
+- **Point impact**: scenario point win rate minus baseline point win rate.
+- **Match impact**: estimated match-win change derived from the point impact.
+- **Runs**: number of repeated analyses contributing to the result.
+
+A positive result favors the scenario variant. A negative result means it performed worse than the baseline.
+
+Use Scenarios when several coordinated changes belong together, such as a serve-focused or attack-focused team profile. Use Skills when you want to isolate one probability.
+
+## Round Robin Pane
+
+Select two or more teams to simulate every unique pairing.
+
+### Win Rate Matrix
+
+Read the matrix as **row team versus column team**. A value of `62.5%` in row Alpha and column Beta means Alpha won 62.5% of its simulated points against Beta. The reverse cell should be approximately `37.5%`.
+
+The diagonal contains `-` because a team is not compared with itself.
+
+### Rankings
+
+**Average Win %** is a team's arithmetic mean point win rate against every other selected team. Rankings are sorted from highest to lowest average.
+
+Example: if Alpha records 60% against Beta and 54% against Gamma, Alpha's average is 57%.
+
+This ranking weights every opponent equally. It is not a league table, match record, confidence score, or strength-of-schedule adjustment.
+
+## Rallies Pane
+
+Generate example points to inspect how the state machine moves from serve to the point result.
+
+- Blue cards represent Team A actions.
+- Red cards represent Team B actions.
+- Arrows show action order.
+- The quality label describes the sampled outcome, such as excellent, good, poor, error, ace, kill, or defended.
+- The final result identifies the event that decided the point.
+- The winner is the team awarded that point.
+
+Rallies are examples, not summaries. A few generated rallies should not be used to estimate team strength; use Simulate for aggregate results.
+
+## Output and JSON Output
+
+The **Output** pane presents the current result as a chart and readable tables. Running another operation replaces the previous visualization.
+
+The **JSON Output** pane contains the same result in machine-readable form:
+
+- Use **Copy** to copy it.
+- Use it for detailed inspection or downstream analysis.
+- Values under `parameters` record the simulation settings.
+- `used_defaults: true` means BVSim substituted a Basic template for a missing selection.
+- A `note` explains which default was used.
+
+Most users can rely on the chart and tables; the JSON is primarily useful for auditing and integration.
+
+Use **Hide Controls** to give the result panes more space. Use **Info** for the in-application quick guide.
+
+## Default Selections
+
+- Simulate, Skills, and Rallies use a Basic template when a team selection is blank.
+- Round Robin requires at least two selected teams in the web interface.
+- Scenarios use the selected team as both the baseline team and baseline opponent.
+
+## How to Interpret Results Responsibly
+
+- Compare differences that are larger than the displayed uncertainty.
+- Repeat important analyses with Accurate mode.
+- Check whether the team probability inputs are realistic and based on enough observations.
+- Do not interpret a point win rate as a match win rate.
+- Do not interpret correlation in the model as proof that training a skill will cause the predicted improvement.
+- Remember that BVSim models the configured volleyball states; injuries, tactics, fatigue, weather, partnerships, and opponent adaptation are not represented unless encoded in the probabilities.
+
+## Current Limitations
+
+- Analyses run synchronously, so large requests keep the page waiting until they finish.
+- The web interface is intended for local or trusted use and has no authentication.
+- Generated values contain Monte Carlo sampling variation.
+- Confidence intervals and match impacts are approximations from the simulator, not guarantees.

@@ -148,3 +148,40 @@ def test_skills_explicit_multi_run_includes_holdout(client):
         row['adjusted_p_value'] is not None
         for row in data['effect_statistics']
     )
+
+
+def test_scenarios_default_to_one_interactive_run(client):
+    rv = client.post(
+        '/api/skills',
+        json={
+            "custom": ["sample_team_a.yaml"],
+            "points": 20,
+            "seed": 789,
+        },
+    )
+
+    assert rv.status_code == 200
+    data = rv.get_json()
+    assert data['parameters']['runs'] == 1
+    assert data['holdout_statistics'] == []
+    assert data['skills'][0]['match']['lower'] is None
+
+
+def test_compare_honors_custom_point_count(client):
+    rv = client.post(
+        '/api/compare',
+        json={"teams": ["Basic", "Advanced"], "points": 20},
+    )
+
+    assert rv.status_code == 200
+    assert rv.get_json()['parameters']['points'] == 20
+
+
+def test_workload_controls_are_present(client):
+    rv = client.get('/')
+
+    assert rv.status_code == 200
+    page = rv.get_data(as_text=True)
+    assert 'id="skillsRuns"' in page
+    assert 'id="scenariosRuns"' in page
+    assert 'id="comparePoints"' in page

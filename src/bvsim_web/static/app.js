@@ -65,6 +65,17 @@ function setScenariosStatus(msg, spinning=true){
   if(!el) return; if(!msg){ el.textContent=''; return; }
   el.innerHTML = (spinning?'<span class="spinner"></span>':'') + msg;
 }
+function setTeamsStatus(msg, spinning=false){
+  const el = document.getElementById('teamsStatus');
+  if(!el) return;
+  el.replaceChildren();
+  if(spinning){
+    const spinner = document.createElement('span');
+    spinner.className = 'spinner';
+    el.appendChild(spinner);
+  }
+  el.appendChild(document.createTextNode(msg || ''));
+}
 
 // toggleOutput removed (output always visible now)
 function startWorking(msg = 'Working') {
@@ -451,7 +462,7 @@ async function refreshTeams() {
             <span>${displayName}</span>
           </span>
           <span class=\"actions\">
-            <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+            <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"Edit team\" title=\"Open editor\" onclick=\"event.stopPropagation(); openTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
             <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete team\" onclick=\"event.stopPropagation(); deleteTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
             <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download team\" onclick=\"event.stopPropagation(); downloadTeam('${safeFile}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
           </span>`;
@@ -468,7 +479,7 @@ async function refreshTeams() {
           <span>${label}</span>
         </span>
         <span class=\"actions\">
-          <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"View ${label} template\" onclick=\"event.stopPropagation(); openTemplate('${kind}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
+          <button class=\"btn btn--secondary btn--icon btn--sm\" aria-label=\"View ${label} template\" title=\"Open editor\" onclick=\"event.stopPropagation(); openTemplate('${kind}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-edit'/></svg></button>
           <button class=\"btn btn--danger btn--icon btn--sm\" aria-label=\"Delete disabled\" disabled><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-delete'/></svg></button>
           <button class=\"btn btn--surface btn--icon btn--sm\" aria-label=\"Download ${label} template\" onclick=\"event.stopPropagation(); downloadTemplate('${kind}')\"><svg class=\"icon\" aria-hidden=\"true\"><use href='#icon-download'/></svg></button>
         </span>`;
@@ -563,13 +574,29 @@ async function createTeam() {
 async function createTeamEnhanced() {
   const name = document.getElementById('newTeamName').value.trim();
   const base = document.getElementById('newTeamBase').value;
-  if (!name) return out('Enter a team name');
+  const button = document.getElementById('addTeamBtn');
+  const buttonLabel = document.getElementById('addTeamBtnLabel');
+  if (!name) {
+    setTeamsStatus('Enter a team name');
+    document.getElementById('newTeamName').focus();
+    return;
+  }
+  if(button) button.disabled = true;
+  if(buttonLabel) buttonLabel.textContent = 'Adding...';
+  setTeamsStatus(`Adding ${name}...`, true);
   try {
     const res = await api('/api/teams', { method: 'POST', body: JSON.stringify({ name, base }) });
     out(res);
     document.getElementById('newTeamName').value='';
-    refreshTeams();
-  } catch(e){ out(e.message); }
+    await refreshTeams();
+    setTeamsStatus(`Added ${name}`);
+  } catch(e){
+    setTeamsStatus(e.message);
+    out(e.message);
+  } finally {
+    if(button) button.disabled = false;
+    if(buttonLabel) buttonLabel.textContent = 'Add Team';
+  }
 }
 
 function triggerTeamUpload(){
@@ -602,35 +629,263 @@ async function uploadTeam(file) {
 function showTeamModal(){ const m=document.getElementById('teamEditorModal'); if(m) m.style.display='flex'; }
 function closeTeamModal(){ const m=document.getElementById('teamEditorModal'); if(m) m.style.display='none'; }
 
-async function openTeam(file){
+function setSaveButtonMode(kind){
+  const saveBtn = document.getElementById('teamSaveBtn');
+  const saveLabel = document.getElementById('teamSaveLabel');
+  if(!saveBtn || !saveLabel) return;
+  saveBtn.disabled = false;
+  saveBtn.title = kind === 'template' ? 'Create a new team from this template' : 'Save changes';
+  saveLabel.textContent = kind === 'template' ? 'Save as team' : 'Save';
+}
+
+function loadEditorContent(data, kind, mode){
+  const ta = document.getElementById('teamEditor');
+  window.visualEditorData = null;
+  if(ta) {
+    ta.value = data.content || '';
+    ta.dataset.filename = data.file || '';
+    ta.dataset.kind = kind;
+  }
+  if(window.teamYamlEditor && window.teamYamlEditor.session){
+    window.teamYamlEditor.session.setValue(data.content || '');
+  }
+  const fn = document.getElementById('teamEditorFilename');
+  if(fn) fn.textContent = data.file || data.name || '';
+  const title = document.getElementById('teamEditorTitle');
+  if(title) title.textContent = kind === 'scenario' ? 'Edit Scenario' : 'Edit Team';
+  setSaveButtonMode(kind);
+  setEditorMode(mode || 'text');
+}
+
+async function openTeam(file, mode='text'){
   if(!file) return;
   try {
     const data = await api(`/api/teams/${encodeURIComponent(file)}`);
-    const ta = document.getElementById('teamEditor');
-    if(ta) { ta.value = data.content || ''; ta.dataset.filename = data.file; }
-    if(window.teamYamlEditor && window.teamYamlEditor.session){
-      window.teamYamlEditor.session.setValue(data.content || '');
-    }
-    const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = data.file;
+    loadEditorContent(data, 'team', mode);
     setTeamEditStatus(`Loaded ${data.file}`);
-    // Enable save for real teams
-    const saveBtn = document.getElementById('teamSaveBtn'); if(saveBtn){ saveBtn.disabled=false; saveBtn.title='Save changes'; }
     showTeamModal();
   } catch(e){ setTeamEditStatus(e.message, true); }
 }
 
-// Open read-only template (Save disabled)
-async function openTemplate(kind){
+// Open a template that can be saved as a new team.
+async function openTemplate(kind, mode='text'){
   try {
     const data = await api(`/api/templates/${encodeURIComponent(kind)}`);
     const ta = document.getElementById('teamEditor');
-    if(ta){ ta.value = data.content || ''; delete ta.dataset.filename; ta.dataset.templateKind = kind; }
-    if(window.teamYamlEditor && window.teamYamlEditor.session){ window.teamYamlEditor.session.setValue(data.content || ''); }
-    const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = `${data.name} Template (read-only)`;
-    setTeamEditStatus(`Loaded ${data.name} template (read-only)`);
-    const saveBtn = document.getElementById('teamSaveBtn'); if(saveBtn){ saveBtn.disabled=true; saveBtn.title='Templates cannot be saved directly'; }
+    loadEditorContent(data, 'template', mode);
+    if(ta){ delete ta.dataset.filename; ta.dataset.templateKind = kind; }
+    const fn = document.getElementById('teamEditorFilename'); if(fn) fn.textContent = `${data.name} Template`;
+    setTeamEditStatus(`Loaded ${data.name} template`);
     showTeamModal();
   } catch(e){ setTeamEditStatus(e.message, true); }
+}
+
+async function openSelectedScenario(mode='text'){
+  const select = document.getElementById('scenarioFiles');
+  const selected = select && Array.from(select.selectedOptions).filter(o => !o.disabled);
+  if(!selected || selected.length !== 1){
+    setScenariosStatus('Select exactly one scenario to edit', false);
+    return;
+  }
+  try {
+    const data = await api(`/api/scenarios/${encodeURIComponent(selected[0].value)}`);
+    loadEditorContent(data, 'scenario', mode);
+    setTeamEditStatus(`Loaded ${data.file}`);
+    showTeamModal();
+  } catch(e){ setScenariosStatus(e.message, false); }
+}
+
+function editorYaml(){
+  const ta = document.getElementById('teamEditor');
+  return window.teamYamlEditor && window.teamYamlEditor.session ? window.teamYamlEditor.session.getValue() : (ta ? ta.value : '');
+}
+
+function pathLabel(value){
+  return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function setNestedValue(root, path, value){
+  let target = root;
+  path.slice(0, -1).forEach(key => { target = target[key]; });
+  target[path[path.length - 1]] = value;
+}
+
+function updateDistributionTotals(){
+  document.querySelectorAll('.distribution-total').forEach(el => {
+    const path = JSON.parse(el.dataset.path);
+    let value = window.visualEditorData;
+    path.forEach(key => { value = value[key]; });
+    const total = Object.values(value).reduce((sum, item) => sum + Number(item || 0), 0);
+    el.textContent = `Total ${total.toFixed(2)}`;
+    el.classList.toggle('is-invalid', Math.abs(total - 1) > 0.0001);
+  });
+}
+
+function renderVisualObject(container, object, path=[]){
+  Object.entries(object).forEach(([key, value]) => {
+    const nextPath = path.concat(key);
+    if(value && typeof value === 'object' && !Array.isArray(value)){
+      const section = document.createElement('details');
+      section.className = 'visual-editor-section';
+      section.open = path.length < 1;
+      const summary = document.createElement('summary');
+      summary.textContent = pathLabel(key);
+      if(Object.values(value).length > 1 && Object.values(value).every(item => typeof item === 'number')){
+        const total = document.createElement('span');
+        total.className = 'distribution-total';
+        total.dataset.path = JSON.stringify(nextPath);
+        summary.appendChild(total);
+      }
+      const fields = document.createElement('div');
+      fields.className = 'visual-editor-fields';
+      renderVisualObject(fields, value, nextPath);
+      section.append(summary, fields);
+      container.appendChild(section);
+      return;
+    }
+    const row = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = pathLabel(key);
+    const input = document.createElement('input');
+    if(typeof value === 'number'){
+      row.className = 'visual-field';
+      const range = document.createElement('input');
+      range.type = 'range';
+      const scenarioDelta = document.getElementById('teamEditor').dataset.kind === 'scenario'
+        && Object.keys(window.visualEditorData).some(item => item.includes('.'));
+      range.min = scenarioDelta ? '-1' : '0';
+      range.max = '1';
+      range.step = '0.01';
+      range.value = value;
+      input.type = 'text';
+      input.inputMode = 'decimal';
+      input.pattern = '-?[0-9]*\\.?[0-9]*';
+      input.value = value;
+      const update = (raw, source) => {
+        const parsed = Number(raw);
+        if(!Number.isFinite(parsed)) return;
+        setNestedValue(window.visualEditorData, nextPath, parsed);
+        if(source === 'range') input.value = parsed;
+        range.value = parsed;
+        updateDistributionTotals();
+      };
+      range.addEventListener('input', event => update(event.target.value, 'range'));
+      input.addEventListener('input', event => update(event.target.value, 'input'));
+      row.append(label, range, input);
+    } else {
+      row.className = 'visual-field visual-field--text';
+      input.type = 'text';
+      input.value = value == null ? '' : String(value);
+      input.addEventListener('input', event => setNestedValue(window.visualEditorData, nextPath, event.target.value));
+      row.append(label, input);
+    }
+    container.appendChild(row);
+  });
+}
+
+function syncVisualFromText(){
+  if(typeof jsyaml === 'undefined') throw new Error('Visual editor support did not load');
+  const parsed = jsyaml.load(editorYaml());
+  if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('YAML must contain a mapping');
+  window.visualEditorData = parsed;
+  const visual = document.getElementById('visualTeamEditor');
+  visual.innerHTML = '';
+  renderVisualObject(visual, parsed);
+  updateDistributionTotals();
+}
+
+function syncTextFromVisual(){
+  if(!window.visualEditorData || typeof jsyaml === 'undefined') return;
+  const content = jsyaml.dump(window.visualEditorData, { noRefs:true, lineWidth:-1, sortKeys:false });
+  const ta = document.getElementById('teamEditor');
+  ta.value = content;
+  if(window.teamYamlEditor && window.teamYamlEditor.session) window.teamYamlEditor.session.setValue(content);
+}
+
+function validateEditorProbabilities(){
+  if(typeof jsyaml === 'undefined') return ['YAML support did not load'];
+  let parsed;
+  try {
+    parsed = jsyaml.load(editorYaml());
+  } catch(e) {
+    return [`Invalid YAML: ${e.message}`];
+  }
+  if(!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return ['YAML must contain a mapping'];
+  const errors = [];
+  const validateDistribution = (label, probabilities) => {
+    if(!probabilities || typeof probabilities !== 'object' || Array.isArray(probabilities)){
+      errors.push(`${label} must be a probability group`);
+      return;
+    }
+    const values = Object.values(probabilities);
+    if(values.some(value => typeof value !== 'number' || !Number.isFinite(value))){
+      errors.push(`${label} must contain only numbers`);
+      return;
+    }
+    if(values.some(value => value < 0 || value > 1)){
+      errors.push(`${label} values must be between 0 and 1`);
+    }
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if(Math.abs(total - 1) > 0.001){
+      errors.push(`${label} must total 1.00 (currently ${total.toFixed(4)})`);
+    }
+  };
+  if(parsed.serve_probabilities){
+    validateDistribution('Serve probabilities', parsed.serve_probabilities);
+  }
+  [
+    ['Receive probabilities', parsed.receive_probabilities],
+    ['Set probabilities', parsed.set_probabilities],
+    ['Attack probabilities', parsed.attack_probabilities],
+    ['Block probabilities', parsed.block_probabilities],
+    ['Dig probabilities', parsed.dig_probabilities]
+  ].forEach(([sectionLabel, section]) => {
+    if(!section) return;
+    if(typeof section !== 'object' || Array.isArray(section)){
+      errors.push(`${sectionLabel} must contain probability groups`);
+      return;
+    }
+    Object.entries(section).forEach(([condition, probabilities]) => {
+      validateDistribution(`${sectionLabel} / ${pathLabel(condition)}`, probabilities);
+    });
+  });
+  return errors;
+}
+
+function showTeamEditErrors(errors){
+  const errList = document.getElementById('teamEditErrors');
+  if(!errList) return;
+  errList.innerHTML = '';
+  errors.forEach(message => {
+    const item = document.createElement('li');
+    item.textContent = message;
+    errList.appendChild(item);
+  });
+  errList.style.display = errors.length ? 'block' : 'none';
+}
+
+function setEditorMode(mode){
+  const textMode = mode !== 'visual';
+  const aceEditor = document.getElementById('aceTeamEditor');
+  const visualEditor = document.getElementById('visualTeamEditor');
+  const textBtn = document.getElementById('textEditorModeBtn');
+  const visualBtn = document.getElementById('visualEditorModeBtn');
+  const note = document.getElementById('editorModeNote');
+  try {
+    if(textMode && window.visualEditorData) syncTextFromVisual();
+    if(!textMode) syncVisualFromText();
+  } catch(e) {
+    setTeamEditStatus(`Cannot open visual editor: ${e.message}`, true);
+    return;
+  }
+  aceEditor.style.display = textMode ? 'block' : 'none';
+  visualEditor.style.display = textMode ? 'none' : 'block';
+  textBtn.setAttribute('aria-pressed', String(textMode));
+  visualBtn.setAttribute('aria-pressed', String(!textMode));
+  note.textContent = textMode
+    ? 'Changes are validated server-side; ensure required fields remain intact.'
+    : 'Visual edits preserve values but rewrite YAML formatting and comments when saved.';
+  if(textMode && window.teamYamlEditor) window.teamYamlEditor.resize();
 }
 
 function downloadTemplate(kind){
@@ -639,26 +894,76 @@ function downloadTemplate(kind){
 
 async function saveTeamEdit(){
   const ta = document.getElementById('teamEditor');
-  const file = ta && ta.dataset.filename;
-  if(!file) return setTeamEditStatus('No team loaded', true);
-  if(window.teamYamlEditor && window.teamYamlEditor.session){ ta.value = window.teamYamlEditor.session.getValue(); }
+  let file = ta && ta.dataset.filename;
+  const kind = ta && ta.dataset.kind || 'team';
+  const visualActive = document.getElementById('visualTeamEditor').style.display !== 'none';
+  if(visualActive) syncTextFromVisual();
+  else if(window.teamYamlEditor && window.teamYamlEditor.session) ta.value = window.teamYamlEditor.session.getValue();
+  const consistencyErrors = validateEditorProbabilities();
+  if(consistencyErrors.length){
+    showTeamEditErrors(consistencyErrors);
+    setTeamEditStatus('Fix inconsistent probability groups before saving', true);
+    return;
+  }
   try {
-    startWorking('Saving team');
-    const response = await fetch(`/api/teams/${encodeURIComponent(file)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: ta.value }) });
+    if(kind === 'template'){
+      if(typeof jsyaml === 'undefined') throw new Error('YAML support did not load');
+      const parsed = jsyaml.load(ta.value);
+      const currentName = parsed && typeof parsed.name === 'string' ? parsed.name.trim() : '';
+      const suggestedName = /^(basic|advanced)$/i.test(currentName) ? '' : currentName;
+      const name = window.prompt('Name for the new team', suggestedName);
+      if(name === null) return;
+      if(!name.trim()) return setTeamEditStatus('Enter a name for the new team', true);
+      parsed.name = name.trim();
+      ta.value = jsyaml.dump(parsed, { noRefs:true, lineWidth:-1, sortKeys:false });
+      if(window.teamYamlEditor && window.teamYamlEditor.session) window.teamYamlEditor.session.setValue(ta.value);
+      startWorking('Creating team');
+      const createResponse = await fetch('/api/teams', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ name:parsed.name, content:ta.value })
+      });
+      if(!createResponse.ok){
+        const payload = await createResponse.json();
+        throw new Error(payload.error || 'Could not create team');
+      }
+      const created = await createResponse.json();
+      file = created.file;
+      ta.dataset.filename = file;
+      ta.dataset.kind = 'team';
+      delete ta.dataset.templateKind;
+      const filename = document.getElementById('teamEditorFilename');
+      if(filename) filename.textContent = file;
+      setSaveButtonMode('team');
+      clearWorking();
+      setTeamEditStatus(`Saved ${file} ✓`);
+      showTeamEditErrors([]);
+      refreshTeams();
+      return;
+    }
+    if(!file) return setTeamEditStatus('No editable file loaded', true);
+    startWorking(kind === 'scenario' ? 'Saving scenario' : 'Saving team');
+    const endpoint = ta.dataset.kind === 'scenario' ? `/api/scenarios/${encodeURIComponent(file)}` : `/api/teams/${encodeURIComponent(file)}`;
+    const response = await fetch(endpoint, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ content: ta.value }) });
     clearWorking();
     if(!response.ok){
       let payload; try{ payload = await response.json(); }catch{ payload={ error: await response.text() }; }
       if(payload && payload.errors){
-        const errList=document.getElementById('teamEditErrors'); if(errList){ errList.innerHTML=''; payload.errors.forEach(m=>{ const li=document.createElement('li'); li.textContent=m; errList.appendChild(li); }); errList.style.display='block'; }
+        showTeamEditErrors(payload.errors);
         setTeamEditStatus(`${payload.error}: ${payload.errors[0]}`, true); out(payload);
       } else { setTeamEditStatus(payload.error||'Save failed', true); }
       return;
     }
     const res = await response.json();
     setTeamEditStatus(`Saved ${res.file} ✓`);
-    const errList=document.getElementById('teamEditErrors'); if(errList){ errList.innerHTML=''; errList.style.display='none'; }
-    refreshTeams();
-  } catch(e){ setTeamEditStatus(e.message, true); }
+    if(res.content){
+      ta.value = res.content;
+      if(window.teamYamlEditor && window.teamYamlEditor.session) window.teamYamlEditor.session.setValue(res.content);
+      if(visualActive) syncVisualFromText();
+    }
+    showTeamEditErrors([]);
+    if(ta.dataset.kind === 'scenario') refreshScenarioFiles(); else refreshTeams();
+  } catch(e){ clearWorking(); setTeamEditStatus(e.message, true); }
 }
 
 async function deleteTeam(file){
@@ -672,7 +977,19 @@ async function deleteTeam(file){
   } catch(e){ setTeamEditStatus(e.message, true); }
 }
 function downloadTeam(file){ if(!file) return; window.open(`/api/teams/${encodeURIComponent(file)}/download`, '_blank'); }
-function downloadCurrentTeam(){ const ta=document.getElementById('teamEditor'); if(!ta || !ta.dataset.filename) return setTeamEditStatus('No team loaded', true); downloadTeam(ta.dataset.filename); }
+function downloadCurrentYaml(){
+  const ta=document.getElementById('teamEditor');
+  if(!ta) return;
+  if(document.getElementById('visualTeamEditor').style.display !== 'none') syncTextFromVisual();
+  else if(window.teamYamlEditor && window.teamYamlEditor.session) ta.value = window.teamYamlEditor.session.getValue();
+  const filename = ta.dataset.filename || `${ta.dataset.templateKind || 'template'}.yaml`;
+  const blob = new Blob([ta.value], { type:'text/yaml' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 0);
+}
 
 function formatTeamYaml(){
   const ta=document.getElementById('teamEditor'); if(!ta) return;
@@ -681,6 +998,7 @@ function formatTeamYaml(){
   const trimmed = txt.split('\n').map(l=>l.replace(/\s+$/,'')).join('\n');
   if(window.teamYamlEditor && window.teamYamlEditor.session){ window.teamYamlEditor.session.setValue(trimmed); }
   ta.value = trimmed;
+  window.visualEditorData = null;
   setTeamEditStatus('Whitespace trimmed');
 }
 

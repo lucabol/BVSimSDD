@@ -34,6 +34,24 @@ def test_create_team_and_list(client):
     assert any('WebTestTeam' in (n or '') for n in names)
 
 
+def test_create_team_rejects_inconsistent_probabilities_without_writing(client, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    content = """name: Invalid Totals
+serve_probabilities:
+  ace: 0.2
+  in_play: 0.7
+  error: 0.05
+"""
+
+    rv = client.post(
+        '/api/teams',
+        json={"name": "Invalid Totals", "content": content},
+    )
+
+    assert rv.status_code == 400
+    assert not (tmp_path / "team_invalid_totals.yaml").exists()
+
+
 def test_simulate_quick(client):
     rv = client.post('/api/simulate', json={"team_a": "WebTestTeam", "team_b": "WebTestTeam", "quick": True})
     assert rv.status_code == 200, rv.data
@@ -259,3 +277,59 @@ def test_workload_controls_are_present(client):
     assert 'id="compareBackend"' in page
     assert 'id="skillsBackend"' in page
     assert 'id="scenariosBackend"' in page
+    assert 'onclick="openSelectedScenario()"' in page
+    assert 'id="visualTeamEditor"' in page
+    assert 'id="teamsStatus"' in page
+    assert 'id="addTeamBtn"' in page
+
+
+def test_scenario_visual_editor_api(client, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    scenario = tmp_path / "scenario_visual.yaml"
+    scenario.write_text("serve_probabilities.ace: 0.05\n")
+
+    rv = client.get('/api/scenarios/scenario_visual.yaml')
+    assert rv.status_code == 200
+    assert rv.get_json()['content'] == "serve_probabilities.ace: 0.05\n"
+
+    updated = "serve_probabilities.ace: 0.08\n"
+    rv = client.put(
+        '/api/scenarios/scenario_visual.yaml',
+        json={"content": updated},
+    )
+    assert rv.status_code == 200
+    assert scenario.read_text() == updated
+
+
+def test_scenario_visual_editor_rejects_non_numeric_values(client, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    scenario = tmp_path / "scenario_visual.yaml"
+    scenario.write_text("serve_probabilities.ace: 0.05\n")
+
+    rv = client.put(
+        '/api/scenarios/scenario_visual.yaml',
+        json={"content": "serve_probabilities.ace: aggressive\n"},
+    )
+
+    assert rv.status_code == 400
+    assert scenario.read_text() == "serve_probabilities.ace: 0.05\n"
+
+
+def test_scenario_visual_editor_accepts_team_variant(client, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    scenario = tmp_path / "scenario_team.yaml"
+    content = """name: Visual Variant
+serve_probabilities:
+  ace: 0.2
+  in_play: 0.75
+  error: 0.05
+"""
+    scenario.write_text(content)
+
+    rv = client.put(
+        '/api/scenarios/scenario_team.yaml',
+        json={"content": content},
+    )
+
+    assert rv.status_code == 200
+    assert scenario.read_text() == content

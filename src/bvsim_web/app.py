@@ -114,6 +114,7 @@ def register_routes(app: Flask) -> None:
         name = (data.get("name") or "").strip()
         base = (data.get("base") or "").strip()  # can be '__BASIC__', '__ADVANCED__', or existing team filename/name
         template = data.get("template")  # legacy param (basic/advanced) still supported
+        content = data.get("content")
         overwrite = bool(data.get("overwrite"))
         if not name:
             return error_response("Missing 'name'")
@@ -123,6 +124,18 @@ def register_routes(app: Flask) -> None:
         if out_path.exists() and not overwrite:
             return error_response("File already exists (set overwrite=true to replace)", 409)
         try:
+            if content is not None:
+                import yaml
+                parsed = yaml.safe_load(content)
+                if not isinstance(parsed, dict) or parsed.get('name') != name:
+                    return error_response("YAML must define the requested team name")
+                team_obj = Team.from_dict(parsed)
+                from bvsim_core.validation import validate_team_configuration
+                val_errors = validate_team_configuration(team_obj)
+                if val_errors:
+                    return jsonify({"error": "Validation failed", "errors": val_errors}), 400
+                out_path.write_text(content)
+                return jsonify({"created": True, "file": output_file, "source": "editor", "content": content})
             # Determine source data
             if base:
                 if base == '__BASIC__':
@@ -232,16 +245,14 @@ def register_routes(app: Flask) -> None:
             parsed = yaml.safe_load(content)
             if not isinstance(parsed, dict) or 'name' not in parsed:
                 return error_response("YAML must define a 'name' field")
-            # Write file
-            p.write_text(content)
-            # Validate by constructing Team
-            team_obj = Team.from_yaml_file(str(p))
+            team_obj = Team.from_dict(parsed)
             # Probability validation
             from bvsim_core.validation import validate_team_configuration
             val_errors = validate_team_configuration(team_obj)
             if val_errors:
                 return jsonify({"error": "Validation failed", "errors": val_errors, "file": p.name}), 400
-            return jsonify({"updated": True, "file": p.name, "validated": True})
+            p.write_text(content)
+            return jsonify({"updated": True, "file": p.name, "validated": True, "content": content})
         except Exception as e:
             return error_response(f"Update failed: {e}", 400)
 
@@ -760,6 +771,53 @@ def register_routes(app: Flask) -> None:
             return jsonify({"scenario_files": files})
         except Exception as e:
             return error_response(f"List scenarios failed: {e}", 500)
+
+    @app.get("/api/scenarios/<scenario_file>")
+    def api_get_scenario(scenario_file: str):
+        import yaml
+        p = Path(Path(scenario_file).name)
+        if p.suffix.lower() not in ('.yaml', '.yml') or not p.exists():
+            return error_response("Scenario file not found", 404)
+        try:
+            content = p.read_text()
+            parsed = yaml.safe_load(content)
+            if not isinstance(parsed, dict):
+                return error_response("Scenario YAML must contain a mapping")
+            return jsonify({"file": p.name, "content": content})
+        except Exception as e:
+            return error_response(f"Failed to load scenario: {e}", 400)
+
+    @app.put("/api/scenarios/<scenario_file>")
+    def api_update_scenario(scenario_file: str):
+        import yaml
+        p = Path(Path(scenario_file).name)
+        if p.suffix.lower() not in ('.yaml', '.yml') or not p.exists():
+            return error_response("Scenario file not found", 404)
+        data = request.get_json(force=True, silent=True) or {}
+        content = data.get('content')
+        if content is None:
+            return error_response("Missing 'content'")
+        try:
+            parsed = yaml.safe_load(content)
+            if not isinstance(parsed, dict) or not parsed:
+                return error_response("Scenario YAML must contain at least one adjustment")
+            is_delta_file = all(
+                isinstance(key, str)
+                and '.' in key
+                and isinstance(value, (int, float))
+                and not isinstance(value, bool)
+                for key, value in parsed.items()
+            )
+            if not is_delta_file:
+                team_obj = Team.from_dict(parsed)
+                from bvsim_core.validation import validate_team_configuration
+                val_errors = validate_team_configuration(team_obj)
+                if val_errors:
+                    return jsonify({"error": "Validation failed", "errors": val_errors, "file": p.name}), 400
+            p.write_text(content)
+            return jsonify({"updated": True, "file": p.name, "validated": True, "content": content})
+        except Exception as e:
+            return error_response(f"Update failed: {e}", 400)
 
     @app.post("/api/analyze")
     def api_analyze():

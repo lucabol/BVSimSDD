@@ -134,6 +134,27 @@ ul.team-list li:hover { background:#f1f5f9; }
 /* Ace Editor (CDN) */
 #teamEditor { font-family:ui-monospace,monospace; }
 #aceTeamEditor { position:relative; width:100%; height:320px; border:1px solid #1e2d3e; border-radius:8px; font-size:12px; }
+.editor-mode-switch { display:inline-flex; gap:2px; padding:2px; border:1px solid var(--color-border-subtle); border-radius:var(--radius-sm); background:#edf2f7; }
+.editor-mode-switch .btn { --_bg:transparent; --_bg-hover:#fff; --_color:var(--color-text-subtle); --_ring:var(--color-brand-accent); border:0; }
+.editor-mode-switch .btn[aria-pressed="true"] { --_bg:#fff; --_bg-hover:#fff; --_color:var(--color-brand); box-shadow:var(--shadow-sm); }
+#visualTeamEditor { display:none; height:320px; overflow:auto; border:1px solid var(--color-border-subtle); border-radius:var(--radius-md); background:#f8fafc; padding:10px; }
+.visual-editor-section { margin:0 0 10px; border:1px solid var(--color-border); border-radius:var(--radius-sm); background:#fff; overflow:hidden; }
+.visual-editor-section > summary { cursor:pointer; padding:7px 9px; font-size:.68rem; font-weight:700; color:var(--color-text); background:#edf4fb; }
+.visual-editor-fields { padding:4px 9px 8px; }
+.visual-field { display:grid; grid-template-columns:minmax(145px,1fr) minmax(110px,1.4fr) 74px; gap:8px; align-items:center; padding:5px 0; border-bottom:1px solid #edf1f5; }
+.visual-field:last-child { border-bottom:0; }
+.visual-field label { overflow-wrap:anywhere; letter-spacing:0; }
+.visual-field input[type="range"] { padding:0; accent-color:var(--color-brand-accent); }
+.visual-field input[type="number"], .visual-field input[type="text"] { background:#fff; }
+.visual-field--text { grid-template-columns:minmax(145px,1fr) minmax(180px,2fr); }
+.distribution-total { display:inline-flex; margin-left:6px; padding:2px 6px; border-radius:10px; background:#dff3e4; color:var(--color-success); font-size:.58rem; font-weight:700; }
+.distribution-total.is-invalid { background:#fde8e8; color:var(--color-danger); }
+.scenario-editor-actions { display:flex; gap:6px; flex-wrap:wrap; margin-top:2px; }
+@media (max-width:600px) {
+  .visual-field { grid-template-columns:1fr 68px; }
+  .visual-field input[type="range"] { grid-column:1 / -1; grid-row:2; }
+  .visual-field--text { grid-template-columns:1fr; }
+}
 /* HELP MODAL */
 #helpModal { position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(13,25,38,0.55); z-index:600; }
 #helpModal .modal-card { background:#fff; width:min(920px, 92vw); max-height:86vh; display:flex; flex-direction:column; border-radius:12px; box-shadow:0 6px 18px -4px rgba(0,0,0,.3); border:1px solid #0d47a1; }
@@ -172,6 +193,7 @@ ul.team-list li:hover { background:#f1f5f9; }
     <symbol id="icon-download" viewBox="0 0 24 24"><path fill="currentColor" d="M5 20h14v-2H5m14-9h-4V3H9v6H5l7 7 7-7Z"/></symbol>
     <symbol id="icon-save" viewBox="0 0 24 24"><path fill="currentColor" d="M17 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V7l-4-4Zm0 16H5V5h10v4h4v10ZM12 12a3 3 0 0 0-3 3h2a1 1 0 0 1 2 0 1 1 0 0 1-1 1 2 2 0 0 0 0 4 3 3 0 0 0 3-3h-2a1 1 0 0 1-2 0 1 1 0 0 1 1-1 2 2 0 0 0 0-4Z"/></symbol>
     <symbol id="icon-format" viewBox="0 0 24 24"><path fill="currentColor" d="M3 5v4h2V7h4V5H3Zm6 6h6v2h-6v-2Zm8-2h4V5h-6v2h2v2Zm-2 8v-2h-6v2h6Zm-8-4v2H5v2H3v-4h4Zm10 4h4v-4h-2v2h-2v2Z"/></symbol>
+    <symbol id="icon-tune" viewBox="0 0 24 24"><path fill="currentColor" d="M3 17v2h6v-2H3Zm0-12v2h10V5H3Zm10 16v-2h8v-2h-8v-2h-2v6h2ZM7 9v2H3v2h4v2h2V9H7Zm14 4v-2H11v2h10Zm-6-4h2V7h4V5h-4V3h-2v6Z"/></symbol>
     <symbol id="icon-close" viewBox="0 0 24 24"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></symbol>
     <symbol id="icon-collapse" viewBox="0 0 24 24"><path fill="currentColor" d="M7 15h10l-5-6-5 6Z"/></symbol>
     <symbol id="icon-expand" viewBox="0 0 24 24"><path fill="currentColor" d="M7 9h10l-5 6-5-6Z"/></symbol>
@@ -199,10 +221,11 @@ ul.team-list li:hover { background:#f1f5f9; }
           </div>
         </div>
         <div class="btn-group">
-          <button onclick="createTeamEnhanced()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-add"/></svg><span>Add Team</span></button>
+          <button type="button" id="addTeamBtn" onclick="createTeamEnhanced()" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-add"/></svg><span id="addTeamBtnLabel">Add Team</span></button>
           <input type="file" id="uploadTeamFile" accept=".yaml,.yml" style="display:none;" />
-          <button class="btn btn--secondary" onclick="triggerTeamUpload()"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg><span>Upload</span></button>
+          <button type="button" class="btn btn--secondary" onclick="triggerTeamUpload()"><svg class="icon" aria-hidden="true"><use href="#icon-upload"/></svg><span>Upload</span></button>
         </div>
+        <div id="teamsStatus" class="status" role="status" aria-live="polite"></div>
         <label style="margin-top:4px">Teams</label>
         <ul class="team-list" id="teamList"></ul>
   <!-- Refresh button removed (auto-refresh via actions renders manually unnecessary) -->
@@ -285,6 +308,9 @@ ul.team-list li:hover { background:#f1f5f9; }
         <label for="scenarioFiles">Select Scenario Files (multi)</label>
         <select id="scenarioFiles" multiple size="6" aria-describedby="scenarioFilesHelp" style="min-height:110px;"></select>
   <div id="scenarioFilesHelp" class="note">Hold Ctrl/Command to choose multiple scenario YAML team variant files (root directory *.yaml). Team plays vs itself.</div>
+        <div class="scenario-editor-actions">
+          <button type="button" class="btn btn--secondary btn--sm" onclick="openSelectedScenario()"><svg class="icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Edit selected</span></button>
+        </div>
         <div class="flex-row">
           <div><label>Points per variant</label><input id="scenariosPoints" type="number" min="1" placeholder="default" /></div>
           <div><label>Runs</label><input id="scenariosRuns" type="number" min="1" value="1" /></div>
@@ -372,11 +398,11 @@ ul.team-list li:hover { background:#f1f5f9; }
     </section>
   </div>
 </main>
-<!-- Modal Editor -->
-<div id="teamEditorModal" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,25,38,0.55);z-index:500;">
-  <div style="background:#fff; width:clamp(300px,80%,860px); max-height:85vh; display:flex; flex-direction:column; border-radius:12px; box-shadow:0 6px 18px -4px rgba(0,0,0,.3); border:1px solid #0d47a1;">
+<!-- Team and scenario editor -->
+<div id="teamEditorModal" role="dialog" aria-modal="true" aria-labelledby="teamEditorTitle" style="position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(13,25,38,0.55);z-index:500;">
+  <div role="document" style="background:#fff; width:clamp(300px,80%,860px); max-height:85vh; display:flex; flex-direction:column; border-radius:12px; box-shadow:0 6px 18px -4px rgba(0,0,0,.3); border:1px solid #0d47a1;">
     <div style="padding:10px 14px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,#0d47a1,#1669c1); color:#fff; border-top-left-radius:12px; border-top-right-radius:12px;">
-      <strong style="font-size:.75rem; letter-spacing:.5px;">Edit Team YAML</strong>
+      <strong id="teamEditorTitle" style="font-size:.75rem; letter-spacing:.5px;">Edit YAML</strong>
   <button type="button" onclick="closeTeamModal()" class="btn btn--ghost btn--sm"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg><span>Close</span></button>
     </div>
     <div style="padding:12px 14px; display:flex; flex-direction:column; gap:8px; overflow:auto;">
@@ -384,16 +410,21 @@ ul.team-list li:hover { background:#f1f5f9; }
         <span id="teamEditorFilename" style="font-weight:700; color:#0d305f; font-size:.78rem;"></span>
         <span id="teamEditStatus" class="status" style="margin:0; font-size:.66rem;"></span>
       </div>
+      <div class="editor-mode-switch" role="group" aria-label="Editor mode">
+        <button type="button" id="textEditorModeBtn" class="btn btn--sm" aria-pressed="true" onclick="setEditorMode('text')"><svg class="icon" aria-hidden="true"><use href="#icon-edit"/></svg><span>Text</span></button>
+        <button type="button" id="visualEditorModeBtn" class="btn btn--sm" aria-pressed="false" onclick="setEditorMode('visual')"><svg class="icon" aria-hidden="true"><use href="#icon-tune"/></svg><span>Visual</span></button>
+      </div>
       <!-- Replace textarea (kept hidden for fallback) with Ace container -->
       <textarea id="teamEditor" style="display:none;"></textarea>
       <div id="aceTeamEditor"></div>
+      <div id="visualTeamEditor" aria-label="Visual probability editor"></div>
   <div style="display:flex; gap:8px; flex-wrap:wrap;">
-  <button type="button" id="teamSaveBtn" onclick="saveTeamEdit()" class="btn btn--success"><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg><span>Save</span></button>
-  <button type="button" class="btn btn--secondary" onclick="downloadCurrentTeam()"><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg><span>Download</span></button>
+  <button type="button" id="teamSaveBtn" onclick="saveTeamEdit()" class="btn btn--success"><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg><span id="teamSaveLabel">Save</span></button>
+  <button type="button" class="btn btn--secondary" onclick="downloadCurrentYaml()"><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg><span>Download</span></button>
   <button type="button" class="btn btn--secondary" onclick="formatTeamYaml()"><svg class="icon" aria-hidden="true"><use href="#icon-format"/></svg><span>Format</span></button>
       </div>
   <ul id="teamEditErrors" style="list-style:disc; margin:4px 0 0 18px; padding:0; font-size:.62rem; color:#b71c1c; display:none;"></ul>
-      <div class="note" style="margin-top:2px;">Changes are validated server-side; ensure required fields remain intact.</div>
+      <div id="editorModeNote" class="note" style="margin-top:2px;">Changes are validated server-side; ensure required fields remain intact.</div>
     </div>
   </div>
 </div>
@@ -460,6 +491,7 @@ ul.team-list li:hover { background:#f1f5f9; }
   BVSim Web MVP - Generated interface. Edit YAML files directly to fine-tune probabilities.
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
 <script src="/static/app.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict/ace.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/ace-builds@1.32.9/src-min-noconflict/ext-language_tools.js" defer></script>
